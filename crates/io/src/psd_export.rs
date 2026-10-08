@@ -437,7 +437,13 @@ impl Ex {
                     _ => adjust_map::Channels::Other,
                 };
                 let cged = raw.iter().find(|(k, _)| k == b"CgEd").map(|(_, d)| d.clone());
-                let keep = raw.iter().any(|(k, d)| adjust_map::ADJUSTMENT_KEYS.contains(&k) && adjust_map::parse(k, d, cged.as_deref(), channels) == *a);
+                let keep = raw.iter().any(|(k, d)| {
+                    // A previously saved PhotoCraft v2 Photo Filter block may be 18 bytes.
+                    // It parses here, but Photoshop requires four-byte alignment, so repair
+                    // that legacy record on re-save rather than preserving the broken bytes.
+                    let legacy_phfl = k == b"phfl" && d.starts_with(&[0, 2]) && d.len() % 4 != 0;
+                    !legacy_phfl && adjust_map::ADJUSTMENT_KEYS.contains(&k) && adjust_map::parse(k, d, cged.as_deref(), channels) == *a
+                });
                 if !keep {
                     raw.retain(|(k, _)| !adjust_map::ADJUSTMENT_KEYS.contains(&k) && k != b"CgEd");
                     let w = adjust_map::write(a);
