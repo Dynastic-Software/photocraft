@@ -944,7 +944,10 @@ mod tests {
                 assert_eq!(blocks[0].1.len(), 20);
                 assert_eq!(&blocks[0].1[17..], &[0, 0, 0]);
                 let Adjustment::PhotoFilter { color, density: read_density, preserve_luminosity: read_preserve } =
-                    parse(b"phfl", &blocks[0].1, None, Channels::Rgb) else { panic!("written phfl must parse") };
+                    parse(b"phfl", &blocks[0].1, None, Channels::Rgb)
+                else {
+                    panic!("written phfl must parse")
+                };
                 assert!(color.iter().zip([0.8, 0.4, 0.2]).all(|(got, expected)| (got - expected).abs() <= 1.0 / 65535.0));
                 assert!((read_density - density).abs() < 0.00001);
                 assert_eq!(read_preserve, preserve_luminosity);
