@@ -673,7 +673,11 @@ pub fn write(adj: &Adjustment) -> Vec<([u8; 4], Vec<u8>)> {
             put16(&mut v, 0);
             v.extend_from_slice(&((density.clamp(0.0, 1.0) * 100.0).round() as u32).to_be_bytes());
             v.push(u8::from(*preserve_luminosity));
-            v.push(0);
+            // Photoshop requires the 17-byte Photo Filter payload after the version to be
+            // padded to a 4-byte boundary INSIDE the tagged block's declared length.
+            // A single pad byte made an 18-byte `phfl` block that Photoshop could not open
+            // even though PhotoCraft and other tolerant readers accepted it (#1455).
+            v.extend_from_slice(&[0, 0, 0]);
             return vec![(*b"phfl", v)];
         }
         Adjustment::ChannelMixer { matrix, monochrome } => {
