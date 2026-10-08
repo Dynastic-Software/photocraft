@@ -924,12 +924,28 @@ mod tests {
         let mut v2 = i16s(&[2, 0]);
         v2.extend([0xff, 0xff, 0x80, 0x00, 0, 0, 0, 0]);
         v2.extend(40u32.to_be_bytes());
-        v2.extend([1, 0]);
+        v2.extend([1, 0, 0, 0]);
+        assert_eq!(v2.len(), 20, "Photo Filter must occupy 20 bytes");
+        assert_eq!(&v2[17..], &[0, 0, 0], "padding is included inside the block length");
         let a = parse(b"phfl", &v2, None, Channels::Rgb);
         let Adjustment::PhotoFilter { color, density, preserve_luminosity: true } = a else { panic!("{a:?}") };
         assert_eq!(color, [1.0, 32768.0 / 65535.0, 0.0]);
         assert_eq!(density, 0.4);
         assert_eq!(write(&a)[0].1, v2, "version 2 RGB is written back byte-exact");
+        // Older PhotoCraft files used only one padding byte (18 bytes); keep importing them,
+        // but never produce that Photoshop-incompatible length again.
+        assert_eq!(parse(b"phfl", &v2[..18], None, Channels::Rgb), a);
+        for preserve_luminosity in [false, true] {
+            for density in [0.0, 0.14, 1.0] {
+                let adjustment = Adjustment::PhotoFilter { color: [0.8, 0.4, 0.2], density, preserve_luminosity };
+                let blocks = write(&adjustment);
+                assert_eq!(blocks.len(), 1);
+                assert_eq!(blocks[0].0, *b"phfl");
+                assert_eq!(blocks[0].1.len(), 20);
+                assert_eq!(&blocks[0].1[17..], &[0, 0, 0]);
+                assert_eq!(parse(b"phfl", &blocks[0].1, None, Channels::Rgb), adjustment);
+            }
+        }
         // Version 2, Lab colour structure: L 50, a 0, b 0 is mid gray.
         let mut lab = i16s(&[2, 7, 5000, 0, 0, 0]);
         lab.extend(25u32.to_be_bytes());
