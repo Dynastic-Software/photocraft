@@ -1377,24 +1377,15 @@ mod tests {
     fn photo_filter_psd_is_four_byte_aligned_and_round_trips() {
         let color = [60000u16, 30000, 0].map(|x| x as f32 / 65535.0);
         let adjustment = photocraft_doc::Adjustment::PhotoFilter { color, density: 0.14, preserve_luminosity: true };
-        let mut doc = Document::with_background(
-            "Photo Filter PSD",
-            photocraft_geom::Size::new(32, 24),
-            ColorMode::Rgb,
-            SampleType::U8,
-            photocraft_doc::Color::WHITE,
-        );
+        let mut doc =
+            Document::with_background("Photo Filter PSD", photocraft_geom::Size::new(32, 24), ColorMode::Rgb, SampleType::U8, photocraft_doc::Color::WHITE);
         let mut layer = Layer::new("Warming Filter", LayerContent::Adjustment(adjustment.clone()));
         doc.layers.push(layer.clone());
 
         let assert_phfl = |file: &PsdFile| {
             let records = &file.layer_info.as_ref().unwrap().layers;
-            let data = records
-                .iter()
-                .flat_map(|r| r.blocks.iter())
-                .find(|b| b.key == *b"phfl")
-                .map(|b| b.data.as_slice())
-                .expect("Photo Filter adjustment data");
+            let data =
+                records.iter().flat_map(|r| r.blocks.iter()).find(|b| b.key == *b"phfl").map(|b| b.data.as_slice()).expect("Photo Filter adjustment data");
             assert_eq!(data.len(), 20, "PSD layer block length includes four-byte padding");
             assert_eq!(&data[0..2], &[0, 2], "version 2 RGB Photo Filter");
             assert_eq!(&data[17..], &[0, 0, 0], "three padding bytes after the 17-byte payload");
