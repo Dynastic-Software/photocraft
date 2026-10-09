@@ -807,6 +807,7 @@
 	Cache Level:	Cache-Stufe:
 	Camera Raw isn't open	Camera Raw ist nicht geöffnet
 	Cancel	Abbrechen
+	Reset	Zurücksetzen
 	Cancel (Esc)	Abbrechen (Esc)
 	Cancel any current edits (Esc)	Aktuelle Bearbeitungen abbrechen (Esc)
 	Cancel current crop operation  (Esc)	Aktuelle Freistellung abbrechen  (Esc)
@@ -2185,6 +2186,16 @@
 	Lines +/−	Zeilen +/−
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binAdded} / −{binDeleted} binary assets, {first} – {last}	@{login}: {prs} PRs, {commits} Commits, +{added} / −{deleted} Zeilen (Δ {delta}), +{binAdded} / −{binDeleted} Binärdateien, {first} – {last}
 
+# Swatches panel
+	Create new swatch	Neues Farbfeld erstellen
+	New Swatch…	Neues Farbfeld…
+	New Swatch Group…	Neue Farbfeldgruppe…
+	Import Swatches…	Farbfelder importieren…
+	Replace Swatches…	Farbfelder ersetzen…
+	Export Swatches…	Farbfelder exportieren…
+	Export Swatches for Exchange…	Farbfelder für Austausch exportieren…
+	Reset Swatches	Farbfelder zurücksetzen
+	Add to Swatches	Zu Farbfeldern hinzufügen
 # Layer Style > Blending Options (Advanced Blending)
 	Blend If:	Farbbereich:
 	Channels:	Kanäle:
@@ -2213,3 +2224,37 @@
 	Click a red pupil to neutralize it	Klicken Sie auf eine rote Pupille
 	open source	Open Source
 	…and {n} more	…und {n} weitere
+
+	Eyedroppers:	Pipetten:
+	Set Black Point	Schwarzpunkt festlegen
+	Set Neutral Gray Point	Neutralen Graupunkt festlegen
+	Set White Point	Weißpunkt festlegen
+	Unavailable in this color mode	In diesem Farbmodus nicht verfügbar
+
+# Layer colour labels.
+layerLabel	No Color	Keine Farbe
+	Seafoam	Meeresschaum
+	Indigo	Indigo
+	Fuchsia	Fuchsia
+	Violet	Violett
+	Large document: redrawing on the CPU	Großes Dokument: Neuzeichnen auf der CPU
+	This redraw took {seconds} s on the CPU.	Dieses Neuzeichnen auf der CPU dauerte {seconds} s.
+	Edits that change the whole document, such as a layer's blend mode, opacity or visibility, redraw all of it.	Änderungen, die das ganze Dokument betreffen, etwa Füllmethode, Deckkraft oder Sichtbarkeit einer Ebene, zeichnen es vollständig neu.
+	Its layers don't fit the GPU memory budget. Raising Memory usage in Preferences › Performance raises the budget, up to a quarter of this computer's memory.	Die Ebenen passen nicht in das GPU-Speicherbudget. Eine höhere Speichernutzung unter Voreinstellungen › Leistung erhöht das Budget, bis zu einem Viertel des Arbeitsspeichers dieses Computers.
+	The GPU compositor wasn't used: {reason}	Der GPU-Compositor wurde nicht verwendet: {reason}
+cameraRaw	Light	Licht
+fontWeight	Thin	Haarfein
+fontWeight	ExtraLight	Extraleicht
+fontWeight	Light	Leicht
+fontWeight	Regular	Normal
+fontWeight	Medium	Medium
+fontWeight	SemiBold	Halbfett
+fontWeight	Bold	Fett
+fontWeight	ExtraBold	Extrafett
+fontWeight	Black	Schwarz
+fontWeight	Italic	Kursiv
+
+# Pattern Stamp tool
+	Pattern Stamp Tool	Musterstempel-Werkzeug
+	Pattern Stamp	Musterstempel
+	Impressionist	Impressionistisch

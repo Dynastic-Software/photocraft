@@ -125,7 +125,8 @@ pub struct Drag {
     /// sizing it (marquees, lasso, shapes; `hold_keys`).
     pub reposition: bool,
     /// A marquee or lasso drag that started inside the selection moves it instead of drawing:
-    /// `Some(false)` moves the outline, `Some(true)` moves the floating piece (`select.float`).
+    /// `Some(false)` moves the outline, `Some(true)` moves the floating piece (`select.float`), as
+    /// every Move-tool drag with a selection does (`move_ui::moves_selected_pixels`).
     pub sel_move: Option<bool>,
     pub lasso: Option<crate::lasso_ui::Lasso>,
 }
@@ -431,6 +432,7 @@ pub(crate) fn freehand_tool(tool: Tool) -> bool {
             | Tool::SpotHealing
             | Tool::Healing
             | Tool::CloneStamp
+            | Tool::PatternStamp
             | Tool::Blur
             | Tool::Sharpen
             | Tool::Smudge
@@ -950,6 +952,9 @@ fn ensure_gpu(app: &mut PhotocraftApp, idx: usize, visible: DRect) -> bool {
         log::info!("{e}; using the CPU compositor");
     }
     app.perf.record(r.kind, r.px, r.composite_ms, r.upload_ms);
+    if r.kind == "full" {
+        crate::notices::slow_cpu_refresh(app, id.0, r.composite_ms + r.upload_ms, r.fallback.as_deref());
+    }
     if r.kind.starts_with("gpu") {
         app.perf.gpu_uploads = r.uploads;
     } else {
@@ -1253,7 +1258,7 @@ fn tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
             let cut = name_g.size().x + 0.5 < natural_w - STUDIO_TAB_PAD + STUDIO_TAB_GAP - meta_g.size().x;
             let resp = ui.interact(r, ui.id().with(("dtab", i)), Sense::click());
             resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, sel, &st.doc.name));
-            doc_tabs.push(r);
+            doc_tabs.push((i, r));
             if sel {
                 ui.painter().rect_filled(r, t.radius_sm, t.card);
                 ui.painter().rect_stroke(r, t.radius_sm, Stroke::new(1.0, t.card_border), egui::StrokeKind::Inside);
@@ -1476,7 +1481,7 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
         resp.context_menu(|ui| {
             tab_action = tab_context_menu(ui, i, tab_count);
         });
-        doc_tabs.push(r);
+        doc_tabs.push((i, r));
     }
     for &(i, r) in placed.iter().filter(|(i, _)| *i >= tab_count) {
         let Some((job, _, frac)) = opening.get(i - tab_count) else { continue };
@@ -1535,14 +1540,19 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TabStrip {
     pub rect: Rect,
-    /// The document tabs, left to right.
-    pub tabs: Vec<Rect>,
+    /// The document tabs shown, left to right, with their document index. When the tabs overflow
+    /// into the » menu, some documents have no tab here.
+    pub tabs: Vec<(usize, Rect)>,
 }
 
 impl TabStrip {
-    /// The tab position a drop at `x` opens at: before the first tab whose middle is right of it.
+    /// The document position a drop at `x` opens at: before the first shown tab whose middle is
+    /// right of it, else after the last shown tab.
     pub fn slot(&self, x: f32) -> usize {
-        self.tabs.iter().filter(|r| r.center().x < x).count()
+        match self.tabs.iter().find(|(_, r)| r.center().x >= x) {
+            Some(&(i, _)) => i,
+            None => self.tabs.last().map_or(0, |&(i, _)| i.saturating_add(1)),
+        }
     }
 }
 
@@ -1554,7 +1564,9 @@ fn drop_slot_line(app: &mut PhotocraftApp, ui: &egui::Ui) {
     let at = app.services.cursor_pos.as_mut().and_then(|f| f(ui.ctx()));
     let crate::file_open::DropTarget::Tabs(slot) = app.drop_target(ui.ctx(), at) else { return };
     let Some(tabs) = app.tab_strip.as_ref().map(|s| &s.tabs) else { return };
-    let Some((r, after)) = tabs.get(slot).map(|r| (*r, false)).or_else(|| tabs.last().map(|r| (*r, true))) else { return };
+    let Some((r, after)) = tabs.iter().find(|(i, _)| *i == slot).map(|&(_, r)| (r, false)).or_else(|| tabs.last().map(|&(_, r)| (r, true))) else {
+        return;
+    };
     crate::widgets::drop_line(ui, r, after, true, &crate::theme::Tokens::get(ui.ctx()));
 }
 
@@ -1651,7 +1663,7 @@ fn start_screen(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     app.ui.open_dialog(crate::state::DialogKind::NewDocument, fields);
                 }
                 if crate::widgets::secondary_button(ui, &open_label, 190.0).clicked() {
-                    app.open_dialog_file();
+                    let _ = app.open_dialog_file();
                 }
             });
             ui.add_space(22.0);
@@ -2034,9 +2046,11 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
     };
 
     if under_dialog {
-        // With the Color Picker on top the image is its eyedropper, whatever the tool; Space and
-        // the middle button still pan (`color_picker_ui::sample_at`).
-        let picking = primary && crate::color_picker_ui::top(app).is_some();
+        // With a colour dialog picker armed the image is its eyedropper, whatever the tool; Space
+        // and the middle button still pan. Curves uses the same merged-composite sampler as the
+        // Color Picker, never the reduced adjustment preview.
+        let curves_picking = crate::adjust_dialog::picker_armed(app);
+        let picking = primary && (crate::color_picker_ui::top(app).is_some() || curves_picking);
         let hand = app.ui.tool == Tool::Hand && !picking;
         if let Some(d) = crate::dialogs::pan_delta(&ctx, rect, hand) {
             view.center[0] -= d.x / view.zoom * if flip { -1.0 } else { 1.0 };
@@ -2052,7 +2066,11 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
             }
             if let Some(p) = crate::dialogs::free_press(&ctx, rect) {
                 let d = xf.to_doc(p);
-                crate::color_picker_ui::sample_at(app, d[0], d[1]);
+                if curves_picking {
+                    crate::adjust_dialog::sample_at(app, d[0], d[1]);
+                } else {
+                    crate::color_picker_ui::sample_at(app, d[0], d[1]);
+                }
             }
         } else if primary
             && !middle
@@ -2102,7 +2120,12 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
         {
             crate::canvas_tool_menu::open_transform(app, [p.x, p.y]);
         }
-        let lasso_retracted = tool == Tool::Lasso && response.secondary_clicked() && crate::lasso_ui::undo_last_vertex(app);
+        let lasso_retracted = response.secondary_clicked()
+            && match tool {
+                Tool::Lasso => crate::lasso_ui::undo_last_vertex(app),
+                Tool::PolygonLasso => polygon_retract(app),
+                _ => false,
+            };
         if tool == Tool::Lasso {
             crate::lasso_ui::canvas_input(app, &ctx, &xf, &response);
             (buttons.started, buttons.dragged, buttons.stopped, buttons.clicked) = (false, false, false, false);
@@ -2785,9 +2808,11 @@ pub fn tool_event(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers)
     }
     // View › Snap / Snap To and smart guides (snap_ui.rs).
     let raw = ev;
-    // A press anywhere but on the floating piece (or with ⇧ / ⌥, to draw) drops it first.
+    // A press anywhere but on the floating piece (or with ⇧ / ⌥, to draw) drops it first; the
+    // Move tool drags it from anywhere.
     if let ToolEvent::Down { x, y, .. } = raw
         && app.session.active().is_some_and(|st| photocraft_engine::float_cmds::floating(st).is_some())
+        && !crate::move_ui::moves_selected_pixels(app)
         && selection_drag_kind(app, app.ui.tool, [x, y], mods) != Some(true)
     {
         let _ = app.run("select.drop", json!({}));
@@ -2859,9 +2884,19 @@ pub fn tool_event(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers)
     }
     // Move tool over a guide drags the guide (off the canvas deletes it).
     match ev {
-        ToolEvent::Down { x, y, .. } if tool == Tool::Move => {
+        ToolEvent::Down { x, y, pressure } if tool == Tool::Move => {
             if let Some((vertical, i)) = crate::rulers::guide_at(app, x, y) {
                 app.guide_drag = Some(crate::rulers::GuideDrag { vertical, index: Some(i), pos: if vertical { x } else { y } });
+                return;
+            }
+            // With a selection: cut the selected pixels (⌥ copies them) and drag them as a floating
+            // piece, from anywhere, as a marquee ⌘-drag does (no Auto-Select pick).
+            if crate::move_ui::moves_selected_pixels(app) {
+                if crate::move_ui::float_selected(app, mods.alt, 0.0, 0.0) {
+                    let mut d = Drag::new(tool, [x, y], vec![[x, y, pressure as f64]], mods, false);
+                    d.sel_move = Some(true);
+                    app.drag = Some(d);
+                }
                 return;
             }
             // Auto-Select (or ⌘-click while it is off) picks the layer under the pointer first.
@@ -2964,7 +2999,7 @@ pub fn tool_event(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers)
                 Tool::PaintBucket => {
                     let o = app.ui.tool_options.clone();
                     let contents = if o.bucket_fill_pattern { "pattern" } else { "foreground" };
-                    let _ = app.run("paint.bucket", json!({"x": x.floor(), "y": y.floor(), "tolerance": o.tolerance, "contiguous": o.contiguous, "antiAlias": o.anti_alias, "opacity": o.fill_opacity, "contents": contents, "target": paint_target(app)}));
+                    let _ = app.run("paint.bucket", json!({"x": x.floor(), "y": y.floor(), "tolerance": o.tolerance, "contiguous": o.contiguous, "antiAlias": o.anti_alias, "sampleAllLayers": o.sample_all_layers, "opacity": o.fill_opacity, "contents": contents, "target": paint_target(app)}));
                     return;
                 }
                 Tool::RedEye => {
@@ -3042,6 +3077,9 @@ pub fn tool_event(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers)
             if d.tool == Tool::Move && d.points.len() < 2 && matches!(raw, ToolEvent::Up { x, y } if [x, y] == d.start) {
                 app.move_preview = None;
                 crate::move_mods::finish(app);
+                if d.sel_move.is_some() {
+                    finish_selection_drag(app, true, d.start, d.start);
+                }
                 return;
             }
             if d.points.last().is_none_or(|p| p[0] != x || p[1] != y) {
@@ -3127,10 +3165,13 @@ fn selection_shown_offset(app: &PhotocraftApp) -> Option<(i32, i32)> {
 }
 
 /// End of a selection drag: move the outline, or the floating piece. A click without moving
-/// deselects, like a marquee click (a click on a floating piece leaves it floating).
+/// deselects, like a marquee click (a click on a floating piece leaves it floating, unless it never
+/// moved: then it is put back, so Undo isn't spent on it).
 fn finish_selection_drag(app: &mut PhotocraftApp, floating: bool, start: [f64; 2], end: [f64; 2]) {
     let (dx, dy) = ((end[0] - start[0]).round(), (end[1] - start[1]).round());
+    let unmoved = app.session.active().and_then(photocraft_engine::float_cmds::floating).is_some_and(|f| f.offset == (0, 0));
     let r = match (floating, dx == 0.0 && dy == 0.0) {
+        (true, true) if unmoved => app.run("select.drop", json!({})),
         (true, true) => return,
         (false, true) if app.session.is_enabled("select.deselect") => app.run("select.deselect", json!({})),
         (false, true) => return,
@@ -3256,7 +3297,7 @@ pub fn extra_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
 /// Selection mode from the options bar, overridden by modifier keys (⇧ add, ⌥ subtract, ⇧⌥ intersect).
 /// The cursor badge announces the same mode (`tool_feedback`).
 pub(crate) fn selection_mode(app: &PhotocraftApp, m: egui::Modifiers) -> &'static str {
-    crate::tool_feedback::selection_mode(Tool::Lasso, app.ui.selection_mode, m)
+    crate::tool_feedback::document_selection_mode(app, Tool::Lasso, m)
 }
 
 /// A polygonal lasso click adds a vertex; clicking near the first vertex closes the polygon. The
@@ -3279,6 +3320,18 @@ fn polygon_click(app: &mut PhotocraftApp, x: f64, y: f64, mods: egui::Modifiers)
         app.ui.polygon_mode = selection_mode(app, intent).into();
     }
     app.ui.polygon.push([x, y]);
+}
+
+/// Remove the Polygonal Lasso's last vertex (⌫, Delete or a right-click while drawing, #1229);
+/// removing the only one cancels the polygon. False when no polygon is being drawn.
+pub fn polygon_retract(app: &mut PhotocraftApp) -> bool {
+    if app.ui.polygon.pop().is_none() {
+        return false;
+    }
+    if app.ui.polygon.is_empty() {
+        app.ui.polygon_mode.clear();
+    }
+    true
 }
 
 /// A new-selection polygonal (or magnetic) lasso is being drawn, so the selection it will replace
@@ -3549,6 +3602,7 @@ mod tests {
             Tool::Eraser,
             Tool::BackgroundEraser,
             Tool::CloneStamp,
+            Tool::PatternStamp,
             Tool::Smudge,
             Tool::Dodge,
             Tool::Lasso,
@@ -3568,6 +3622,12 @@ mod tests {
         assert!(brush_tip_centre(Tool::Healing, true, false, 20.0));
         assert!(!brush_tip_centre(Tool::Healing, false, false, 20.0));
         assert!(brush_tip_centre(Tool::CloneStamp, false, true, 20.0));
+        assert!(brush_tip_centre(Tool::PatternStamp, false, false, 20.0));
+        assert!(
+            brush_tip_centre(Tool::PatternStamp, true, false, 20.0),
+            "Pattern Stamp keeps the brush centre; Option does not switch it to a clone-source mark"
+        );
+        assert!(!brush_tip_centre(Tool::PatternStamp, false, false, 2.0));
         assert!(brush_tip_centre(Tool::Brush, false, false, 20.0));
         assert!(!brush_tip_centre(Tool::QuickSelection, false, false, 20.0));
         assert!(brush_tip_centre(Tool::BackgroundEraser, false, false, 2.0));

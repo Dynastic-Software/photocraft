@@ -176,6 +176,31 @@ fn parse_hex(s: &str) -> Option<[f32; 4]> {
         _ => None,
     }
 }
+/// Layer › Create / Release Clipping Mask. With a `layer` param, just that layer. Otherwise, as in
+/// Photoshop, the selection (#1248): Create clips every selected layer except the lowest, which
+/// becomes the base; Release releases every selected layer. One history step either way.
+fn set_clipped(s: &mut Session, p: &Value, clip: bool) -> Result<Value> {
+    let label = if clip { "Create Clipping Mask" } else { "Release Clipping Mask" };
+    let ids: Vec<LayerId> = if p.get("layer").is_some() {
+        vec![layer_param(s, p)?]
+    } else {
+        let selected = s.active().ok_or(EngineError::NoDocument)?.selected_layers();
+        match (clip, selected.as_slice()) {
+            (_, []) => vec![layer_param(s, p)?],
+            (_, [one]) => vec![*one],
+            (true, [_base, rest @ ..]) => rest.to_vec(),
+            (false, all) => all.to_vec(),
+        }
+    };
+    s.edit(label, |doc, _| {
+        for id in &ids {
+            doc.layer_mut(*id).ok_or(EngineError::NoLayer(*id))?.clipped = clip;
+        }
+        Ok(())
+    })?;
+    Ok(json!({"layers": ids.iter().map(|id| id.0).collect::<Vec<_>>()}))
+}
+
 pub(crate) fn layer_param(s: &Session, p: &Value) -> Result<LayerId> {
     match p.get("layer").and_then(Value::as_u64) {
         Some(id) => Ok(LayerId(id)),
@@ -579,22 +604,24 @@ fn build() -> Vec<CommandSpec> {
             p,
             i32::MIN
         )),
-        cmd!("layer.createClippingMask", "Create Clipping Mask", ["Layer"], Some("Cmd+Alt+G"), r##"{"layer":id?}"##, has_layer, |s, p| {
-            let id = layer_param(s, p)?;
-            s.edit("Create Clipping Mask", |doc, _| {
-                doc.layer_mut(id).ok_or(EngineError::NoLayer(id))?.clipped = true;
-                Ok(())
-            })?;
-            Ok(Value::Null)
-        }),
-        cmd!("layer.releaseClippingMask", "Release Clipping Mask", ["Layer"], None, r##"{"layer":id?}"##, has_layer, |s, p| {
-            let id = layer_param(s, p)?;
-            s.edit("Release Clipping Mask", |doc, _| {
-                doc.layer_mut(id).ok_or(EngineError::NoLayer(id))?.clipped = false;
-                Ok(())
-            })?;
-            Ok(Value::Null)
-        }),
+        cmd!(
+            "layer.createClippingMask",
+            "Create Clipping Mask",
+            ["Layer"],
+            Some("Cmd+Alt+G"),
+            r##"{"layer":id?} (no layer: every selected layer but the lowest clips to the layer below it)"##,
+            has_layer,
+            |s, p| set_clipped(s, p, true)
+        ),
+        cmd!(
+            "layer.releaseClippingMask",
+            "Release Clipping Mask",
+            ["Layer"],
+            None,
+            r##"{"layer":id?} (no layer: every selected layer)"##,
+            has_layer,
+            |s, p| set_clipped(s, p, false)
+        ),
         cmd!("layer.layerMask.revealAll", "Reveal All", ["Layer", "Layer Mask"], None, r##"{"layer":id?}"##, has_layer, |s, p| set_mask(
             s,
             p,
@@ -897,7 +924,7 @@ fn build() -> Vec<CommandSpec> {
         (
             "curves",
             "Curves…",
-            r##"{"points":json,"red":json,"green":json,"blue":json} (curves as [[in,out],…] in 0..255, 2..19 points: points = composite; red/green/blue, gray, cyan/magenta/yellow/black or lightness/a/b per channel)"##,
+            r##"{"points":json,"red":json,"green":json,"blue":json,"eyedropper":json} (curves as [[in,out],…] in 0..255, 2..19 points: points = composite; red/green/blue, gray, cyan/magenta/yellow/black or lightness/a/b per channel; eyedropper = the dialog's Set Black/Neutral Gray/White Point picker {"point":"black|gray|white","at":[x,y]} or {"point",…,"color":[r,g,b] 0..1}, RGB and Grayscale (no gray) only, applied over the given curves)"##,
         ),
         ("exposure", "Exposure…", r##"{"exposure":-20..20=0,"offset":-0.5..0.5=0,"gamma":0.01..9.99=1}"##),
         ("vibrance", "Vibrance…", r##"{"vibrance":-100..100=0,"saturation":-100..100=0}"##),
@@ -953,7 +980,11 @@ fn build() -> Vec<CommandSpec> {
             enabled: has_doc,
             run: |s, p| {
                 let kind = p.get("__kind").and_then(Value::as_str).unwrap_or("invert").to_string();
-                let adj = crate::adjust_params::from_params(&kind, p, None, doc_mode(s))?;
+                let eyedropped = if kind == "curves" { crate::adjust_params::curves_eyedropper_from_params(s, p)? } else { None };
+                let adj = match eyedropped {
+                    Some(adj) => adj,
+                    None => crate::adjust_params::from_params(&kind, p, None, doc_mode(s))?,
+                };
                 new_adjustment(s, adj)
             },
             journal: true,
@@ -975,7 +1006,11 @@ fn build() -> Vec<CommandSpec> {
             enabled: has_pixel_or_channel,
             run: |s, p| {
                 let kind = p.get("__kind").and_then(Value::as_str).unwrap_or("invert").to_string();
-                let adj = crate::adjust_params::from_params(&kind, p, None, doc_mode(s))?;
+                let eyedropped = if kind == "curves" { crate::adjust_params::curves_eyedropper_from_params(s, p)? } else { None };
+                let adj = match eyedropped {
+                    Some(adj) => adj,
+                    None => crate::adjust_params::from_params(&kind, p, None, doc_mode(s))?,
+                };
                 let label = adj.label().to_string();
                 destructive_adjust(s, &label, adj, p)
             },
@@ -1001,6 +1036,7 @@ fn build() -> Vec<CommandSpec> {
     v.extend(crate::brush_preset_cmds::specs());
     v.extend(crate::eraser_cmds::specs());
     v.extend(crate::preset_import_cmds::specs());
+    v.extend(crate::swatch_cmds::specs());
     v.extend(crate::retouch_cmds::specs());
     v.extend(crate::redeye_cmds::specs());
     v.extend(crate::image_cmds::specs());
@@ -1029,6 +1065,7 @@ fn build() -> Vec<CommandSpec> {
     v.extend(crate::channel_cmds::specs());
     v.extend(crate::adjust_cmds::specs());
     v.extend(crate::layer_menu_cmds::specs());
+    v.extend(crate::layer_label_cmds::specs());
     v.extend(crate::mode_cmds::specs());
     v.extend(crate::multichannel_cmds::specs());
     v.extend(crate::pattern_cmds::specs());
