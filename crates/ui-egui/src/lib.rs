@@ -133,6 +133,7 @@ pub mod transform_tex;
 pub mod transform_tool;
 pub mod type_panels_ui;
 pub mod type_tool;
+mod type_transform;
 mod variables_ui;
 pub mod vector_ui;
 pub mod view_cmds;
@@ -413,6 +414,11 @@ pub struct PhotocraftApp {
     pub(crate) gradient: gradient_ui::LiveGradient,
     /// Filter › Camera Raw Filter dialog (camera_raw_ui).
     pub(crate) camera_raw: Option<camera_raw_ui::CameraRawDialog>,
+    /// A raw file just opened interactively, waiting for the open-time Camera Raw dialog (shown
+    /// on the next frame, which has the egui context).
+    pub(crate) pending_raw_open: Option<camera_raw_ui::RawOpen>,
+    /// The open-time re-develop (or its Camera Raw step) running in the background.
+    pub(crate) raw_redevelop: Option<camera_raw_ui::Redevelop>,
     /// Filter › Adaptive Wide Angle dialog (wide_angle_ui).
     pub(crate) wide_angle: Option<wide_angle_ui::WideAngleDialog>,
     /// Signature of the image we last put on the OS clipboard (to tell ours from other apps').
@@ -425,6 +431,7 @@ pub struct PhotocraftApp {
     pub(crate) clip_read_for_paste: bool,
     /// Pointer position over the canvas (document px), for the Info panel and status bar.
     pub(crate) hover_doc: Option<[f64; 2]>,
+    pub(crate) clone_preview: Option<crate::canvas::ClonePreviewCache>,
     /// Info panel sample cache: ((x, y, revision), composite RGBA).
     info_sample: Option<((i32, i32, u64), [f32; 4])>,
     /// Guide being dragged (from a ruler or with the Move tool).
@@ -433,6 +440,7 @@ pub struct PhotocraftApp {
     pub(crate) crop: crop_ui::CropState,
     /// Type tool layout cache: ((doc, revision, layer), layout).
     pub(crate) type_layout: Option<((u64, u64, u64), std::sync::Arc<photocraft_text::TextLayout>)>,
+    pub(crate) type_transform_preview: Option<type_transform::Preview>,
     /// Channel thumbnails for one document snapshot; view-only revisions reuse their pixels.
     channel_thumbs: Option<(DocId, std::sync::Weak<Document>, Vec<egui::TextureHandle>)>,
     /// Channels panel overlays / channel views drawn over the canvas, per document id.
@@ -521,9 +529,11 @@ impl PhotocraftApp {
             channel_thumbs: None,
             channel_views: HashMap::new(),
             type_layout: None,
+            type_transform_preview: None,
             guide_drag: None,
             crop: Default::default(),
             hover_doc: None,
+            clone_preview: None,
             info_sample: None,
             os_clip_sig: None,
             clip_external: false,
@@ -534,6 +544,8 @@ impl PhotocraftApp {
             distort: Default::default(),
             gradient: Default::default(),
             camera_raw: None,
+            pending_raw_open: None,
+            raw_redevelop: None,
             wide_angle: None,
             tone_hist: None,
             doc_hist: None,
@@ -686,6 +698,7 @@ impl PhotocraftApp {
     /// Keep one view per document, in tab order: a view and its windows stay with their document
     /// when tabs move (`document.move`) or close.
     pub fn sync_views(&mut self) {
+        type_transform::cancel_stale(self);
         crate::lasso_ui::cancel_stale(self);
         let ids: Vec<DocId> = self.session.documents().iter().map(|d| d.doc.id).collect();
         // Where the document of view `i` is now. Views not tracked yet keep their index.
@@ -772,7 +785,12 @@ impl PhotocraftApp {
         self.sync_views();
         self.ui.status = format!("Opened {name}");
         self.ui.status_error = false;
-        notices::io_warnings(self, &format!("Opened {name}"), &warnings);
+        if camera_raw_ui::wants_open_dialog(self, &warnings) {
+            camera_raw_ui::queue_open_dialog(self, name, None, Some(bytes));
+            notices::io_warnings(self, &format!("Opened {name}"), &camera_raw_ui::without_develop_note(&warnings));
+        } else {
+            notices::io_warnings(self, &format!("Opened {name}"), &warnings);
+        }
         // Script events bound to "Open Document".
         photocraft_engine::automate_cmds::document_opened(&mut self.session);
         self.sync_views();
