@@ -101,6 +101,26 @@ pub fn px_value(px: f32) -> Value {
     json!(if px.is_finite() { px.round().clamp(1.0, 300_000.0) as u32 } else { 1 })
 }
 
+/// Name of the preset that takes the clipboard image's size.
+pub const CLIPBOARD: &str = "Clipboard";
+
+/// Offer the Clipboard preset (`w` × `h` px, at 72 ppi) first under the Recent presets, and
+/// select it.
+pub fn set_clipboard(f: &mut Map<String, Value>, w: u32, h: u32) {
+    if w == 0 || h == 0 {
+        return;
+    }
+    f.insert("__clipboard".into(), json!([w, h]));
+    apply_preset(f, &(CLIPBOARD, w, h, 72.0));
+}
+
+/// The clipboard image's size, when the dialog offers the Clipboard preset.
+fn clipboard_preset(f: &Map<String, Value>) -> Option<Preset> {
+    let size = f.get("__clipboard")?.as_array()?;
+    let dim = |i: usize| size.get(i)?.as_u64().and_then(|v| u32::try_from(v).ok()).filter(|v| *v > 0);
+    Some((CLIPBOARD, dim(0)?, dim(1)?, 72.0))
+}
+
 /// Apply a preset to the dialog fields.
 pub fn apply_preset(f: &mut Map<String, Value>, p: &Preset) {
     f.insert("width".into(), json!(p.1));
@@ -145,6 +165,15 @@ fn small_label(ui: &mut egui::Ui, s: &str) {
     ui.label(RichText::new(s).size(11.5).color(t.text_dim));
 }
 
+/// Lay out a preset card's title centred in `width`: wrapped onto at most two lines, the rest
+/// elided, so long translations stay inside the card.
+fn card_title(painter: &egui::Painter, title: &str, width: f32, color: egui::Color32) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple(title.to_owned(), egui::FontId::proportional(12.0), color, width);
+    job.wrap.max_rows = 2;
+    job.halign = egui::Align::Center;
+    painter.layout_job(job)
+}
+
 /// Paint a page thumbnail with the preset's aspect ratio.
 fn page_icon(ui: &egui::Ui, r: Rect, w: u32, h: u32, t: &Tokens) {
     let s = 30.0 / (w.max(h) as f32);
@@ -173,6 +202,8 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     widgets::hairline(ui);
     ui.add_space(8.0);
     let presets = CATEGORIES.iter().find(|c| c.0 == cat).map_or(CATEGORIES[0].1, |c| c.1);
+    // The clipboard image's size comes first among the Recent presets.
+    let presets: Vec<Preset> = clipboard_preset(f).filter(|_| cat == CATEGORIES[0].0).into_iter().chain(presets.iter().copied()).collect();
     let chosen = get_s(f, "__preset", "");
     ui.horizontal_top(|ui| {
         // Left: preset grid.
@@ -202,7 +233,9 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                             ui.painter().rect_stroke(r, t.radius, Stroke::new(1.5, t.accent), StrokeKind::Inside);
                         }
                         page_icon(ui, Rect::from_center_size(pos2(r.center().x, r.top() + 34.0), vec2(40.0, 40.0)), p.1, p.2, &t);
-                        ui.painter().text(pos2(r.center().x, r.top() + 72.0), Align2::CENTER_CENTER, tl!(p.0), egui::FontId::proportional(12.0), t.text);
+                        let title = card_title(ui.painter(), tl!(p.0), card.x - 12.0, t.text);
+                        let elided = title.elided;
+                        ui.painter().galley(pos2(r.center().x, r.top() + 70.0 - title.size().y / 2.0), title, t.text);
                         let unit = if p.3 >= 300.0 { "in" } else { "px" };
                         let size = if unit == "in" {
                             format!(
@@ -214,7 +247,8 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                         } else {
                             format!("{} x {} px @ {} ppi", p.1, p.2, p.3)
                         };
-                        ui.painter().text(pos2(r.center().x, r.top() + 90.0), Align2::CENTER_CENTER, size, egui::FontId::proportional(10.5), t.text_faint);
+                        ui.painter().text(pos2(r.center().x, r.top() + 97.0), Align2::CENTER_CENTER, size, egui::FontId::proportional(10.5), t.text_faint);
+                        let resp = if elided { resp.on_hover_text(tl!(p.0)) } else { resp };
                         if resp.clicked() {
                             apply_preset(f, p);
                         }
@@ -351,6 +385,21 @@ mod tests {
     }
 
     #[test]
+    fn preset_card_titles_fit_the_card_in_every_language() {
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            for lang in crate::i18n::Lang::all() {
+                for p in CATEGORIES.iter().flat_map(|c| c.1.iter()) {
+                    let title = crate::i18n::tr(lang, p.0);
+                    let g = card_title(ui.painter(), title, 152.0, egui::Color32::WHITE);
+                    assert!(g.size().x <= 152.0 && g.rows.len() <= 2 && !g.elided, "{}: {title}", lang.code());
+                }
+            }
+        });
+        out.textures_delta.clear();
+    }
+
+    #[test]
     fn new_document_depth_labels_and_tooltips_are_translated() {
         for lang in crate::i18n::Lang::all().filter(|lang| lang.code() != "en") {
             for (_, label, tooltip) in DEPTH_OPTIONS {
@@ -358,6 +407,25 @@ mod tests {
                 assert_ne!(crate::i18n::tr(lang, tooltip), *tooltip, "{}: {tooltip}", lang.code());
             }
         }
+    }
+
+    #[test]
+    fn clipboard_preset_comes_first_and_is_selected() {
+        // Nothing on the clipboard: the dialog opens as before.
+        let mut app = crate::PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        let f = app.new_document_fields();
+        assert_eq!(f, crate::state::UiState::new_document_fields());
+        assert!(clipboard_preset(&f).is_none());
+        // Pixels copied in the app: the Clipboard preset takes their size, at 72 ppi, selected.
+        app.run("file.new", json!({"width": 200, "height": 100})).unwrap();
+        app.run("select.rect", json!({"x": 10, "y": 20, "width": 123, "height": 45})).unwrap();
+        app.run("edit.copy", json!({})).unwrap();
+        let f = app.new_document_fields();
+        assert_eq!(clipboard_preset(&f), Some((CLIPBOARD, 123, 45, 72.0)));
+        assert_eq!((f["width"].as_u64(), f["height"].as_u64(), f["__preset"].as_str()), (Some(123), Some(45), Some(CLIPBOARD)));
+        let p = command_params(&f);
+        assert!(p.get("__clipboard").is_none(), "file.new never sees the dialog's keys");
+        assert_eq!((p["width"].as_u64(), p["height"].as_u64(), p["resolution"].as_f64()), (Some(123), Some(45), Some(72.0)));
     }
 
     #[test]
@@ -470,6 +538,24 @@ mod tests {
             assert!(fields(&h).get("__preset").is_none(), "typing deselects the preset");
             enter(&mut h);
             assert_eq!(created(&h), (512, 512, 72.0));
+        }
+
+        #[test]
+        fn the_clipboard_card_is_first_and_creates_the_clipboard_size() {
+            let mut h = harness();
+            let mut f = fields(&h);
+            super::super::set_clipboard(&mut f, 640, 360);
+            set_fields(&mut h, f);
+            // Recent lists the Clipboard card first: three presets instead of two.
+            assert!(h.query_by_label_contains("BLANK DOCUMENT PRESETS (3)").is_some());
+            let heading = h.get_by_label_contains("BLANK DOCUMENT PRESETS").rect();
+            // Pick the second card, then the first (Clipboard) again.
+            click_at(&mut h, heading.left_bottom() + egui::vec2(80.0 + 172.0, 60.0));
+            assert_eq!(fields(&h).get("__preset").and_then(|v| v.as_str()), Some("Default Photoshop Size"));
+            click_at(&mut h, heading.left_bottom() + egui::vec2(80.0, 60.0));
+            assert_eq!(fields(&h).get("__preset").and_then(|v| v.as_str()), Some(super::super::CLIPBOARD));
+            enter(&mut h);
+            assert_eq!(created(&h), (640, 360, 72.0));
         }
 
         #[test]

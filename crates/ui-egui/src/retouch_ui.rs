@@ -10,6 +10,17 @@ use crate::canvas::ViewXform;
 use crate::state::Tool;
 use crate::theme::Tokens;
 
+/// The tool a stroke uses with ⌥ held: Dodge and Burn swap, as do Blur and Sharpen.
+pub(crate) fn alt_flipped(tool: Tool, alt: bool) -> Tool {
+    match (tool, alt) {
+        (Tool::Dodge, true) => Tool::Burn,
+        (Tool::Burn, true) => Tool::Dodge,
+        (Tool::Blur, true) => Tool::Sharpen,
+        (Tool::Sharpen, true) => Tool::Blur,
+        _ => tool,
+    }
+}
+
 /// Finish a stroke with a retouching tool. Returns false if `tool` isn't one.
 pub fn finish_stroke(app: &mut PhotocraftApp, tool: Tool, points: &[[f64; 3]], mods: egui::Modifiers) -> bool {
     let o = app.ui.tool_options.clone();
@@ -205,7 +216,7 @@ fn pct(ui: &mut egui::Ui, label: &str, v: &mut f32) {
 
 /// Options bar for the retouching and smart-selection tools. Returns false for other tools.
 pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui, tool: Tool) -> bool {
-    if !tool.is_brushlike() && !matches!(tool, Tool::QuickSelection | Tool::ObjectSelection | Tool::Patch | Tool::ContentAwareMove)
+    if !tool.is_brushlike() && !matches!(tool, Tool::QuickSelection | Tool::ObjectSelection | Tool::Patch | Tool::ContentAwareMove | Tool::RedEye)
         || matches!(tool, Tool::Brush | Tool::Pencil | Tool::MixerBrush | Tool::Eraser)
     {
         return false;
@@ -301,6 +312,14 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui, tool: Tool) -> bo
                 let _ = app.run("select.subject", json!({}));
             }
         }
+        Tool::RedEye => {
+            opt(ui, tl!("Pupil Size"));
+            crate::widgets::value_field(ui, &mut o.red_eye_pupil_size, 1.0..=100.0, "", 50.0);
+            opt(ui, tl!("Darken Amount"));
+            crate::widgets::value_field(ui, &mut o.red_eye_darken, 0.0..=100.0, "", 50.0);
+            crate::widgets::vline(ui, 22.0);
+            opt(ui, tl!("Click a red pupil to neutralize it"));
+        }
         _ => {}
     }
     true
@@ -335,6 +354,32 @@ mod tests {
     fn stripes(app: &mut PhotocraftApp, step: usize, target: &str) {
         for x in (0..100).step_by(step) {
             app.run("paint.pencil", json!({"points": [[x, 0], [x, 60]], "size": 2, "color": "#606060", "target": target})).unwrap();
+        }
+    }
+
+    #[test]
+    fn alt_flips_dodge_burn_and_blur_sharpen() {
+        for (tool, flipped) in [(Tool::Dodge, Tool::Burn), (Tool::Burn, Tool::Dodge), (Tool::Blur, Tool::Sharpen), (Tool::Sharpen, Tool::Blur)] {
+            assert_eq!(alt_flipped(tool, true), flipped);
+            assert_eq!(alt_flipped(tool, false), tool);
+        }
+        for tool in [Tool::Sponge, Tool::Smudge, Tool::Brush] {
+            assert_eq!(alt_flipped(tool, true), tool, "{tool:?} has no ⌥ counterpart");
+        }
+    }
+
+    #[test]
+    fn alt_stroke_runs_the_opposite_tool() {
+        // ⌥ held as the stroke starts: Dodge burns, Burn dodges, Blur sharpens, Sharpen blurs.
+        for (tool, cmd) in [(Tool::Dodge, "paint.burn"), (Tool::Burn, "paint.dodge"), (Tool::Blur, "paint.sharpen"), (Tool::Sharpen, "paint.blur")] {
+            let mut app = app();
+            app.ui.tool = tool;
+            let m = egui::Modifiers::ALT;
+            tool_event(&mut app, ToolEvent::Down { x: 10.0, y: 30.0, pressure: 1.0 }, m);
+            tool_event(&mut app, ToolEvent::Move { x: 50.0, y: 30.0, pressure: 1.0 }, m);
+            tool_event(&mut app, ToolEvent::Up { x: 50.0, y: 30.0 }, m);
+            assert_eq!(app.session.journal.last().map(|(id, _)| id.as_str()), Some(cmd), "{tool:?} with ⌥");
+            assert_eq!(app.ui.tool, tool, "the selected tool stays {tool:?}");
         }
     }
 
@@ -487,5 +532,57 @@ mod tests {
             let sel = app.session.active().unwrap().doc.selection.as_ref().unwrap();
             assert!(sel.sample_channel(72, 30, 0) > 0.0 && sel.sample_channel(22, 30, 0) == 0.0, "{mode}: the selection follows");
         }
+    }
+
+    #[test]
+    fn red_eye_click_corrects_a_pupil_and_errors_on_a_miss() {
+        let mut app = app();
+        app.run("paint.pencil", json!({"points": [[50, 30]], "size": 18, "hardness": 100, "color": "#f21818"})).unwrap();
+        let before = active(&app).surface().unwrap().rgba(50, 30);
+        assert!(before[0] > before[1] + 0.4, "{before:?}");
+        app.ui.tool = Tool::RedEye;
+        // Pupil Size 15 → search radius 22 px, so a click at (8,8) cannot reach the blob at (50,30).
+        app.ui.tool_options.red_eye_pupil_size = 15.0;
+        tool_event(&mut app, ToolEvent::Down { x: 50.0, y: 30.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        tool_event(&mut app, ToolEvent::Up { x: 50.0, y: 30.0 }, egui::Modifiers::NONE);
+        assert!(!app.ui.status_error, "{}", app.ui.status);
+        assert_eq!(app.session.journal.last().map(|(id, _)| id.as_str()), Some("paint.redEye"));
+        let after = active(&app).surface().unwrap().rgba(50, 30);
+        assert!(after[0] < before[0] - 0.15, "before {before:?} after {after:?}");
+        tool_event(&mut app, ToolEvent::Down { x: 8.0, y: 8.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        tool_event(&mut app, ToolEvent::Up { x: 8.0, y: 8.0 }, egui::Modifiers::NONE);
+        assert!(app.ui.status_error);
+        assert!(app.ui.status.contains("no red-eye pixels"), "{}", app.ui.status);
+    }
+
+    #[test]
+    fn red_eye_options_bar_shows_pupil_size_and_darken() {
+        use crate::theme::ThemeKind;
+        use egui::vec2;
+        use egui_kittest::kittest::Queryable;
+        let mut app = app();
+        app.ui.tool = Tool::RedEye;
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1400.0, 60.0)).build_ui_state(
+            |ui, app: &mut PhotocraftApp| {
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
+                crate::panels::options_bar(app, ui);
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, ThemeKind::Studio);
+        h.run_steps(4);
+        h.get_by_label("Pupil Size");
+        h.get_by_label("Darken Amount");
+        assert_eq!(h.state().ui.tool_options.red_eye_pupil_size, 50.0);
+        assert_eq!(h.state().ui.tool_options.red_eye_darken, 50.0);
+    }
+
+    #[test]
+    fn red_eye_is_in_the_j_flyout() {
+        let j = [Tool::SpotHealing, Tool::Healing, Tool::Patch, Tool::ContentAwareMove, Tool::RedEye];
+        assert!(j.contains(&Tool::RedEye));
+        assert!(j.iter().all(|t| t.key() == 'J'));
     }
 }

@@ -103,6 +103,7 @@
 	Fill…	Füllen…
 	Stroke…	Nachziehen…
 	Content-Aware Fill…	Inhaltsbasiert füllen…
+	Delete and Fill Selection	Auswahl löschen und füllen
 	Content-Aware Scale	Inhaltsbasiert skalieren
 	Puppet Warp	Marionetten-Verkrümmung
 	Perspective Warp	Perspektivisch verkrümmen
@@ -1011,6 +1012,7 @@
 	Fisheye	Fischauge
 	Fit	Einpassen
 	Fit Screen	Auf Bildschirm einpassen
+	Fill Screen	Bildschirm ausfüllen
 	Fit in View	In Ansicht einpassen
 	Fixed	Fest
 	Fixed Ratio	Festes Verhältnis
@@ -1339,6 +1341,7 @@
 	Set background color	Hintergrundfarbe festlegen
 	Set foreground color	Vordergrundfarbe festlegen
 	Set painting symmetry options	Symmetrieoptionen für das Malen festlegen
+	Symmetry Off	Symmetrie aus
 	Set shape fill type	Fülltyp der Form festlegen
 	Set shape stroke type	Konturtyp der Form festlegen
 	Set the text color	Textfarbe festlegen
@@ -1791,12 +1794,14 @@
 	Maximize psd compatibility	PSD-Kompatibilität maximieren
 	Medium gray	Mittelgrau
 	Memory usage mb	Speichernutzung (MB)
+	Low resolution previews	Vorschau in niedriger Auflösung
 	Missing glyph protection	Schutz vor fehlenden Glyphen
 	Modern	Modern
 	Nearest neighbor	Nächster Nachbar
 	Never	Nie
 	Normal tip	Normale Spitze
 	Open as smart object	Als Smart-Objekt öffnen
+	Open in camera raw	In Camera Raw öffnen
 	Open documents as tabs	Dokumente als Registerkarten öffnen
 	Overscroll	Überscrollen
 	Performance	Leistung
@@ -1834,6 +1839,7 @@
 	Show slice numbers	Slice-Nummern anzeigen
 	Show tooltips	Tooltips anzeigen
 	Show bounding box when dragging layer	Begrenzungsrahmen beim Ziehen einer Ebene anzeigen
+	System title bar	System-Titelleiste
 	Show transformation values	Transformationswerte anzeigen
 	Slice color	Slice-Farbe
 	Smart guide color	Smart-Hilfslinienfarbe
@@ -1942,6 +1948,8 @@
 	Brush Settings…  (F5): every option of this brush	Pinseleinstellungen…  (F5): jede Option dieses Pinsels
 	Rename Brush…	Pinsel umbenennen…
 	Delete Brush	Pinsel löschen
+	New Brush Preset…	Neue Pinselvorgabe…
+	Brush Preset Options	Pinselvorgaben-Optionen
 	Group name	Gruppenname
 	Brush name	Pinselname
 	Grid view	Rasteransicht
@@ -1991,6 +1999,7 @@
 	No path to make a selection from: draw one with the Pen tool or select one in the Paths panel.	Kein Pfad für eine Auswahl vorhanden: zeichne einen mit dem Stift-Werkzeug oder wähle einen im Pfade-Bedienfeld.
 	Cancel opening	Öffnen abbrechen
 	Cancelled opening {name}	Öffnen von {name} abgebrochen
+	Developing {name}	{name} wird entwickelt
 	Cancelled {label}	{label} abgebrochen
 	Esc to cancel	Esc zum Abbrechen
 	Opening {name}	Öffne {name}
@@ -2101,6 +2110,7 @@
 	4 x 4	4 x 4
 	5 x 5	5 x 5
 	Camera Raw Filter ({layer})	Camera-Raw-Filter ({layer})
+	Camera Raw ({name})	Camera Raw ({name})
 	Edit Type	Text bearbeiten
 	Grid:	Raster:
 	Highlight Clipping Warning (O)	Lichter-Abschneidewarnung (O)
@@ -2142,6 +2152,7 @@
 	Magnetic Lasso Tool	Magnetisches-Lasso-Werkzeug
 	Frequency	Frequenz
 	Use tablet pressure to change pen width	Tablettdruck zum Ändern der Stiftbreite verwenden
+
 # About ▸ Contributors / Models (credits, craftrules standards/contributors.md)
 	About	Über
 	Contributors	Mitwirkende
@@ -2173,3 +2184,30 @@
 	% of all commits	% aller Commits
 	Lines +/−	Zeilen +/−
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binAdded} / −{binDeleted} binary assets, {first} – {last}	@{login}: {prs} PRs, {commits} Commits, +{added} / −{deleted} Zeilen (Δ {delta}), +{binAdded} / −{binDeleted} Binärdateien, {first} – {last}
+
+# Layer Style > Blending Options (Advanced Blending)
+	Blend If:	Farbbereich:
+	Channels:	Kanäle:
+	Knockout	Aussparung
+	Apply At Canvas Bounds	Effekt an Arbeitsflächenbegrenzungen anwenden
+
+# Fill dialog, layer style contours and Image Size
+	Contents:	Inhalt:
+	Custom Pattern:	Eigenes Muster:
+	Foreground Color	Vordergrundfarbe
+	Color…	Farbe…
+	50% Gray	50 % Grau
+	{size} (was {old})	{size} (vorher {old})
+	Cone	Kegel
+	Cone (Inverted)	Kegel (umgekehrt)
+	Domed	Gewölbt
+	Domed (Inverted)	Gewölbt (umgekehrt)
+	Diagonal (Descending)	Diagonal (absteigend)
+
+	Red Eye Tool	Rote-Augen-Werkzeug
+	Red Eye	Rote Augen
+	Pupil Size	Pupillengröße
+	Darken Amount	Abdunklungsgrad
+	Click a red pupil to neutralize it	Klicken Sie auf eine rote Pupille
+	open source	Open Source
+	…and {n} more	…und {n} weitere
