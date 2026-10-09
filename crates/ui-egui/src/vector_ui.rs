@@ -1153,7 +1153,7 @@ mod tests {
         // Make Work Path selects the new work path.
         app.run("select.toWorkPath", json!({"tolerance": 2.0})).unwrap();
         assert_eq!(app.ui.selected_path.as_deref(), Some("work"));
-}
+    }
 
     /// #1482: clicking an existing final Pen anchor breaks its outgoing handle without
     /// deleting the preceding curve or creating another knot; dragging changes only that handle.
@@ -1229,7 +1229,7 @@ mod tests {
         let legacy: PenPath = serde_json::from_value(json!({"knots": [[[10, 10], [10, 10], [10, 10]]]})).unwrap();
         assert!(legacy.unlinked.is_empty());
         assert!(!legacy.dragging && !legacy.adjusting_last);
-}
+    }
 
     /// #1520: changing one corner through the Properties command must keep the other three
     /// independent, remain a live rectangle, and undo/redo as one geometry edit.
