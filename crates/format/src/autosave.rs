@@ -48,6 +48,10 @@ struct Job {
     opts: SaveOptions,
 }
 
+/// One completed revision's disk-write outcome (distinct from enqueue success).
+type SaveOutcome = (u64, std::result::Result<(), String>);
+type CompletedWrites = Arc<Mutex<Vec<SaveOutcome>>>;
+
 /// Background autosaver for one document. Requests are coalesced: if saves
 /// arrive faster than they complete, only the newest snapshot is written.
 pub struct Autosaver {
@@ -57,7 +61,7 @@ pub struct Autosaver {
     handle: Option<JoinHandle<()>>,
     last: Arc<Mutex<Option<Result<SaveStats>>>>,
     /// Per-request write outcomes, delivered to the desktop without blocking its frame.
-    completed: Arc<Mutex<Vec<(u64, std::result::Result<(), String>)>>>,
+    completed: CompletedWrites,
 }
 
 fn sanitize(key: &str) -> String {
@@ -159,7 +163,7 @@ fn worker(
     bundle: PathBuf,
     sidecar: PathBuf,
     last: Arc<Mutex<Option<Result<SaveStats>>>>,
-    completed: Arc<Mutex<Vec<(u64, std::result::Result<(), String>)>>>,
+    completed: CompletedWrites,
 ) {
     let mut writer = PcraftWriter::new();
     while let Ok(mut job) = rx.recv() {
