@@ -995,6 +995,7 @@
 	Fisheye	Fisheye
 	Fit	Pas
 	Fit Screen	Pas Layar
+	Fill Screen	Isi Layar
 	Fit in View	Pas di Tampilan
 	Fixed	Tetap
 	Fixed Ratio	Rasio Tetap
@@ -1774,12 +1775,14 @@
 	Maximize psd compatibility	Maksimalkan kompatibilitas PSD
 	Medium gray	Abu-abu sedang
 	Memory usage mb	Pemakaian memori MB
+	Low resolution previews	Pratinjau resolusi rendah
 	Missing glyph protection	Perlindungan glyph hilang
 	Modern	Modern
 	Nearest neighbor	Nearest neighbor
 	Never	Tidak pernah
 	Normal tip	Ujung normal
 	Open as smart object	Buka sebagai smart object
+	Open in camera raw	Buka di Camera Raw
 	Open documents as tabs	Buka dokumen sebagai tab
 	Overscroll	Overscroll
 	Performance	Performa
@@ -1895,6 +1898,7 @@
 	System Info…	Info Sistem…
 	System Info	Info Sistem
 	More panels	Panel lainnya
+	More documents	Dokumen lainnya
 	These settings aren't available in PhotoCraft yet.	Pengaturan ini belum tersedia di PhotoCraft.
 	Graphics	Grafis
 	Reset GPU Backend	Reset Backend GPU
@@ -1923,6 +1927,8 @@
 	Brush Settings…  (F5): every option of this brush	Pengaturan Kuas…  (F5): semua opsi kuas ini
 	Rename Brush…	Ganti Nama Kuas…
 	Delete Brush	Hapus Kuas
+	New Brush Preset…	Preset Kuas Baru…
+	Brush Preset Options	Opsi Preset Kuas
 	Group name	Nama grup
 	Brush name	Nama kuas
 	Grid view	Tampilan grid
@@ -1970,6 +1976,7 @@
 	No path to make a selection from: draw one with the Pen tool or select one in the Paths panel.	Tidak ada path untuk dibuat seleksi: gambar dengan alat Pen atau pilih salah satu di panel Path.
 	Cancel opening	Batalkan pembukaan
 	Cancelled opening {name}	Pembukaan {name} dibatalkan
+	Developing {name}	Mengembangkan {name}
 	Cancelled {label}	{label} dibatalkan
 	Esc to cancel	Esc untuk batal
 	Opening {name}	Membuka {name}
@@ -2464,6 +2471,7 @@
 	Show Selected Region	Tampilkan Wilayah Terpilih
 cameraRaw	Light	Cahaya
 	Camera Raw Filter ({layer})	Filter Camera Raw ({layer})
+	Camera Raw ({name})	Camera Raw ({name})
 cameraRaw	Lights	Nada Terang
 cameraRaw	Darks	Nada Gelap
 cameraRaw	Blacks	Hitam
@@ -2523,6 +2531,7 @@ cameraRaw	Blending	Pembauran
 	Frequency	Frekuensi
 	Use tablet pressure to change pen width	Gunakan tekanan tablet untuk mengubah lebar pena
 
+
 # About ▸ Contributors / Models (credits, craftrules standards/contributors.md)
 	About	Tentang
 	Contributors	Kontributor
@@ -2554,4 +2563,40 @@ cameraRaw	Blending	Pembauran
 	% of all commits	% dari semua commit
 	Lines +/−	Baris +/−
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binAdded} / −{binDeleted} binary assets, {first} – {last}	@{login}: {prs} PR, {commits} commit, +{added} / −{deleted} baris (Δ {delta}), +{binAdded} / −{binDeleted} berkas biner, {first} – {last}
+# Layer Style > Blending Options (Advanced Blending)
+	Blend If:	Blend If:
+	Channels:	Channel:
+	Knockout	Knockout
 	Apply At Canvas Bounds	Terapkan efek di batas kanvas
+
+# Fill dialog, layer style contours and Image Size
+	Contents:	Isi:
+	Custom Pattern:	Pola Kustom:
+	Foreground Color	Warna Foreground
+	Color…	Warna…
+	50% Gray	Abu-abu 50%
+	{size} (was {old})	{size} (sebelumnya {old})
+	Cone	Kerucut
+	Cone (Inverted)	Kerucut (Terbalik)
+	Domed	Kubah
+	Domed (Inverted)	Kubah (Terbalik)
+	Diagonal (Descending)	Diagonal (Menurun)
+
+	Red Eye Tool	Alat Mata Merah
+	Pupil Size	Ukuran pupil
+	Darken Amount	Jumlah penggelapan
+	Click a red pupil to neutralize it	Klik pupil merah untuk memperbaikinya
+	open source	sumber terbuka
+	…and {n} more	…dan {n} lagi
+
+	Eyedroppers:	Eyedropper:
+	Set Black Point	Atur Titik Hitam
+	Set Neutral Gray Point	Atur Titik Abu-abu Netral
+	Set White Point	Atur Titik Putih
+	Unavailable in this color mode	Tidak tersedia dalam mode warna ini
+
+# Layer colour labels.
+	Seafoam	Busa Laut
+	Indigo	Nila
+	Fuchsia	Fuksia
+	Violet	Ungu

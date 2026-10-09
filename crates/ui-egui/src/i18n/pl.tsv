@@ -1802,6 +1802,7 @@
 	Language	Język
 	Large tabs	Duże karty
 	Legacy compositing	Starszy sposób komponowania
+	Low resolution previews	Podglądy w niskiej rozdzielczości
 	Light gray	Jasnoszary
 	Line	Linia
 	Lines	Linie
@@ -3178,3 +3179,41 @@ cameraRaw	Roughness	Chropowatość
 	% of all commits	% wszystkich commitów
 	Lines +/−	Wiersze +/−
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binAdded} / −{binDeleted} binary assets, {first} – {last}	@{login}: PR: {prs}, commity: {commits}, wiersze +{added} / −{deleted} (Δ {delta}), pliki binarne +{binAdded} / −{binDeleted}, {first} – {last}
+	Open in camera raw	Otwórz w Camera Raw
+	System title bar	Systemowy pasek tytułu
+	More documents	Więcej dokumentów
+	Developing {name}	Wywoływanie {name}
+	Camera Raw ({name})	Camera Raw ({name})
+	Blend If:	Mieszaj, jeśli:
+	Channels:	Kanały:
+	Knockout	Wycięcie
+	New Brush Preset…	Nowe ustawienie wstępne pędzla…
+	Brush Preset Options	Opcje ustawień wstępnych pędzla
+
+# Fill dialog, layer style contours and Image Size
+	Contents:	Zawartość:
+	Custom Pattern:	Własny wzór:
+	Foreground Color	Kolor pierwszego planu
+	Color…	Kolor…
+	50% Gray	50% szarości
+	{size} (was {old})	{size} (wcześniej {old})
+	Cone (Inverted)	Stożek (odwrócony)
+	Domed	Kopuła
+	Domed (Inverted)	Kopuła (odwrócona)
+	Diagonal (Descending)	Przekątna (malejąca)
+	Red Eye Tool	Narzędzie Czerwone oczy
+	Pupil Size	Rozmiar źrenicy
+	Darken Amount	Stopień przyciemnienia
+	Click a red pupil to neutralize it	Kliknij czerwoną źrenicę, aby ją zneutralizować
+	open source	otwarte oprogramowanie
+	…and {n} more	…i {n} więcej
+	Eyedroppers:	Zakraplacze:
+	Set Black Point	Ustaw punkt czerni
+	Set Neutral Gray Point	Ustaw punkt neutralnej szarości
+	Set White Point	Ustaw punkt bieli
+	Unavailable in this color mode	Niedostępne w tym trybie koloru
+
+# Layer colour labels.
+	Seafoam	Morski
+	Indigo	Indygo
+	Fuchsia	Fuksja
