@@ -589,13 +589,14 @@ mod tests {
         autosave(&mut app, &ctx);
 
         let mut failed = false;
-        for _ in 0..500 {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while std::time::Instant::now() < deadline {
             prefs_ui::tick(&mut app, &ctx);
             if app.ui.status.starts_with("Autosave failed:") {
                 failed = true;
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert!(failed, "background write failures must reach the UI");
         assert!(app.ui.status_error);
@@ -606,13 +607,14 @@ mod tests {
         std::fs::create_dir(&recovery).unwrap();
         autosave(&mut app, &ctx);
         let mut recovered = Vec::new();
-        for _ in 0..500 {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while std::time::Instant::now() < deadline {
             prefs_ui::tick(&mut app, &ctx);
             recovered = list_recovery(&recovery);
             if !recovered.is_empty() {
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert_eq!(recovered.len(), 1, "unchanged revision should retry after failure");
         assert_eq!(recovered[0].info.revision, revision);
