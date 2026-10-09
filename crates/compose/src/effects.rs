@@ -1206,13 +1206,18 @@ pub(crate) fn composite_with_effects_prepared(
     // unmasked fill and the mask applies to fill ∪ stroke), joined with a filled shape's outline.
     let kmask = |i: usize| vstroke.as_ref().and_then(|v| v.mask).and_then(|m| m.get(i)).copied().unwrap_or(1.0);
     let union = |i: usize, a: f32| vstroke.as_ref().and_then(|v| v.stroke.px.get(i)).map_or(a, |s| kmask(i) * (a + s[3] * (1.0 - a)));
-    let shape = if maps.outline {
+    // Transparency Shapes Layer off: the shape is the whole layer (its masks, as the maps were
+    // built), and the content's own transparency acts like fill opacity within it.
+    let shapeless = !layer.advanced.transparency_shapes;
+    let shape = if shapeless {
+        maps.crop(&maps.shape, big, 0.0)
+    } else if maps.outline {
         let o = maps.crop(&maps.shape, big, 0.0);
         Map { w, h, v: o.v.iter().zip(&content.px).enumerate().map(|(i, (o, p))| o.max(union(i, p[3]))).collect() }
     } else {
         Map { w, h, v: content.px.iter().enumerate().map(|(i, p)| union(i, p[3])).collect() }
     };
-    let relative = maps.outline || vstroke.is_some();
+    let relative = shapeless || maps.outline || vstroke.is_some();
     let fx = |i: usize, k: usize| maps.crop(&maps.per[i][k], big, 0.0);
     // Layer bounds (gradients aligned with the layer use the whole layer,
     // independent of the render rect).
@@ -1259,6 +1264,10 @@ pub(crate) fn composite_with_effects_prepared(
     // applies: a colour overlay at 100 % replaces the colour of a half-transparent edge pixel and
     // keeps its alpha, as in Photoshop.
     let fill = layer.fill_opacity;
+    // Blend Interior Effects as Group: the interior effects (overlays, satin, inner glow) are
+    // combined with the content first, and fill opacity applies to the combination.
+    let interior_group = layer.advanced.blend_interior && fill < 1.0;
+    let content_fill = if interior_group { 1.0 } else { fill };
     let inside = |a: f32| a > INSIDE_EPS;
     // Within an outline (or a split-off vector stroke) the content's own transparency (a fading
     // gradient fill) acts like fill opacity: the effects still cover the whole shape.
@@ -1266,9 +1275,9 @@ pub(crate) fn composite_with_effects_prepared(
         if !inside(a) {
             0.0
         } else if relative {
-            fill * (kmask(i) * p[3] / a).min(1.0)
+            content_fill * (kmask(i) * p[3] / a).min(1.0)
         } else {
-            fill
+            content_fill
         }
     };
     let mut lay = Buffer { rect: big, px: content.px.iter().zip(&shape.v).enumerate().map(|(i, (p, a))| [p[0], p[1], p[2], lay_alpha(i, p, *a)]).collect() };
@@ -1301,6 +1310,11 @@ pub(crate) fn composite_with_effects_prepared(
     for (i, e) in rev() {
         if let Effect::InnerGlow(g) = e {
             paint_glow(&mut lay, &rel(fx(i, 0)), g, sb, anchor, big, patterns);
+        }
+    }
+    if interior_group {
+        for p in &mut lay.px {
+            p[3] *= fill.max(0.0);
         }
     }
     for (i, e) in rev() {
@@ -1377,7 +1391,17 @@ pub(crate) fn composite_with_effects_prepared(
                 let k = if maps.outline {
                     band * outline_share(shape.v[i], lay.px[i][3])
                 } else if inside(shape.v[i]) {
-                    if vector_shape { 0.0 } else { 1.0 }
+                    if vector_shape {
+                        0.0
+                    } else {
+                        // The stroke lies outside the layer's pixels. Beneath the layer it may show
+                        // only through the part of the pixel the shape doesn't cover (1 - a); the
+                        // layer composited on top covers c = a × fill, so the share beneath is
+                        // (1 - a) / (1 - c). At 100 % fill that is 1 (the layer hides the rest, as
+                        // before); at 0 % fill the interior stays clear (Fill 0 % + Outside stroke).
+                        let c = lay.px[i][3].clamp(0.0, 1.0);
+                        if c >= 1.0 { 1.0 } else { ((1.0 - shape.v[i].clamp(0.0, 1.0)) / (1.0 - c)).clamp(0.0, 1.0) }
+                    }
                 } else {
                     band
                 };

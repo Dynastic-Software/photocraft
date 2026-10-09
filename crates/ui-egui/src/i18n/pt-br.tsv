@@ -1000,6 +1000,7 @@
 	Fisheye	Olho de peixe
 	Fit	Ajustar
 	Fit Screen	Ajustar à tela
+	Fill Screen	Preencher tela
 	Fit in View	Ajustar à visualização
 	Fixed	Fixo
 	Fixed Ratio	Proporção fixa
@@ -1779,12 +1780,14 @@
 	Maximize psd compatibility	Maximizar compatibilidade de PSD
 	Medium gray	Cinza médio
 	Memory usage mb	Uso de memória (MB)
+	Low resolution previews	Visualizações em baixa resolução
 	Missing glyph protection	Proteção de glifos ausentes
 	Modern	Moderno
 	Nearest neighbor	Vizinho mais próximo
 	Never	Nunca
 	Normal tip	Ponta normal
 	Open as smart object	Abrir como objeto inteligente
+	Open in camera raw	Abrir no Camera Raw
 	Open documents as tabs	Abrir documentos como guias
 	Overscroll	Rolagem além dos limites
 	Performance	Desempenho
@@ -1900,6 +1903,7 @@
 	System Info…	Informações do sistema…
 	System Info	Informações do sistema
 	More panels	Mais painéis
+	More documents	Mais documentos
 	These settings aren't available in PhotoCraft yet.	Estas configurações ainda não estão disponíveis no PhotoCraft.
 	Graphics	Gráficos
 	Reset GPU Backend	Redefinir backend da GPU
@@ -1928,6 +1932,8 @@
 	Brush Settings…  (F5): every option of this brush	Configurações do pincel…  (F5): todas as opções deste pincel
 	Rename Brush…	Renomear pincel…
 	Delete Brush	Excluir pincel
+	New Brush Preset…	Nova predefinição de pincel…
+	Brush Preset Options	Opções de predefinições de pincel
 	Group name	Nome do grupo
 	Brush name	Nome do pincel
 	Grid view	Visualização em grade
@@ -1976,6 +1982,7 @@
 	No path to make a selection from: draw one with the Pen tool or select one in the Paths panel.	Nenhum demarcador para criar a seleção: desenhe um com a ferramenta Caneta ou selecione um no painel Demarcadores.
 	Cancel opening	Cancelar abertura
 	Cancelled opening {name}	Abertura de {name} cancelada
+	Developing {name}	Revelando {name}
 	Cancelled {label}	{label} cancelado
 	Esc to cancel	Esc para cancelar
 	Opening {name}	Abrindo {name}
@@ -2459,6 +2466,7 @@
 	Invalid {mode} profile	Perfil {mode} inválido
 	Unnamed {mode} profile	Perfil {mode} sem nome
 	Show bounding box when dragging layer	Mostrar caixa delimitadora ao arrastar a camada
+	System title bar	Barra de título do sistema
 	Freeze Lasso: drag to freeze an area, Alt-drag to thaw it (L)	Laço de congelamento: arraste para congelar uma área, Alt-arraste para descongelá-la (L)
 	Rendering Mode	Modo de renderização
 	Automatic (recommended)	Automático (recomendado)
@@ -2483,6 +2491,7 @@
 	Show Selected Region	Mostrar região selecionada
 cameraRaw	Light	Luz
 	Camera Raw Filter ({layer})	Filtro Camera Raw ({layer})
+	Camera Raw ({name})	Camera Raw ({name})
 cameraRaw	Lights	Claros
 cameraRaw	Darks	Escuros
 cameraRaw	Blacks	Pretos
@@ -2542,6 +2551,7 @@ cameraRaw	Whites	Brancos
 	Magnetic Lasso Tool	Ferramenta Laço magnético
 	Frequency	Frequência
 	Use tablet pressure to change pen width	Usar a pressão da mesa digitalizadora para alterar a largura da caneta
+
 # About ▸ Contributors / Models (credits, craftrules standards/contributors.md)
 	About	Sobre
 	Contributors	Colaboradores
@@ -2573,4 +2583,29 @@ cameraRaw	Whites	Brancos
 	% of all commits	% de todos os commits
 	Lines +/−	Linhas +/−
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binAdded} / −{binDeleted} binary assets, {first} – {last}	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} linhas (Δ {delta}), +{binAdded} / −{binDeleted} arquivos binários, {first} – {last}
+
+# Layer Style > Blending Options (Advanced Blending)
+	Blend If:	Mesclar se:
+	Channels:	Canais:
+	Knockout	Vazado
 	Apply At Canvas Bounds	Aplicar efeito nos limites da tela
+
+# Fill dialog, layer style contours and Image Size
+	Contents:	Conteúdo:
+	Custom Pattern:	Padrão personalizado:
+	Foreground Color	Cor de primeiro plano
+	Color…	Cor…
+	50% Gray	Cinza 50%
+	{size} (was {old})	{size} (antes {old})
+	Cone	Cone
+	Cone (Inverted)	Cone (invertido)
+	Domed	Abaulado
+	Domed (Inverted)	Abaulado (invertido)
+	Diagonal (Descending)	Diagonal (descendente)
+
+	Red Eye Tool	Ferramenta Olhos vermelhos
+	Pupil Size	Tamanho da pupila
+	Darken Amount	Quantidade de escurecimento
+	Click a red pupil to neutralize it	Clique em uma pupila vermelha para corrigi-la
+	open source	código aberto
+	…and {n} more	…e mais {n}
