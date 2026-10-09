@@ -273,10 +273,7 @@ impl RecoveryStore {
 
     /// Return completed write outcomes as (document id, revision, outcome), without blocking.
     pub fn take_completed(&mut self) -> Vec<(u64, u64, std::result::Result<(), String>)> {
-        self.savers
-            .iter()
-            .flat_map(|(&id, saver)| saver.take_completed().into_iter().map(move |(revision, result)| (id, revision, result)))
-            .collect()
+        self.savers.iter().flat_map(|(&id, saver)| saver.take_completed().into_iter().map(move |(revision, result)| (id, revision, result))).collect()
     }
 
     /// Document `doc_id` was saved or closed: remove its recovery data, both its own autosaves
