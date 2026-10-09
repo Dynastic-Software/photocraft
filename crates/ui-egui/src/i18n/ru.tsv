@@ -2422,6 +2422,17 @@ cameraRaw	Roughness	Неровность
 	% of all commits	% от всех коммитов
 	Lines +/−	Строки +/−
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binAdded} / −{binDeleted} binary assets, {first} – {last}	@{login}: PR: {prs}, коммиты: {commits}, строки +{added} / −{deleted} (Δ {delta}), двоичные файлы +{binAdded} / −{binDeleted}, {first} – {last}
+
+# Swatches panel
+	Create new swatch	Создать новый образец
+	New Swatch…	Новый образец…
+	New Swatch Group…	Новая группа образцов…
+	Import Swatches…	Импортировать образцы…
+	Replace Swatches…	Заменить образцы…
+	Export Swatches…	Экспортировать образцы…
+	Export Swatches for Exchange…	Экспортировать образцы для обмена…
+	Reset Swatches	Восстановить образцы
+	Add to Swatches	Добавить в образцы
 # Layer Style > Blending Options (Advanced Blending)
 	Blend If:	Изображение если:
 	Channels:	Каналы:
@@ -2450,3 +2461,34 @@ cameraRaw	Roughness	Неровность
 	Click a red pupil to neutralize it	Щёлкните по красному зрачку, чтобы убрать блик
 	open source	открытый исходный код
 	…and {n} more	…и ещё {n}
+
+	Eyedroppers:	Пипетки:
+	Set Black Point	Задать точку чёрного
+	Set Neutral Gray Point	Задать нейтральную серую точку
+	Set White Point	Задать точку белого
+	Unavailable in this color mode	Недоступно в этом цветовом режиме
+
+# Layer colour labels.
+	Seafoam	Морская пена
+	Indigo	Индиго
+	Fuchsia	Фуксия
+	Violet	Фиолетовый
+	Large document: redrawing on the CPU	Большой документ: перерисовка на CPU
+	This redraw took {seconds} s on the CPU.	Эта перерисовка на CPU заняла {seconds} с.
+	Edits that change the whole document, such as a layer's blend mode, opacity or visibility, redraw all of it.	Правки, затрагивающие весь документ, например режим наложения, непрозрачность или видимость слоя, перерисовывают его целиком.
+	Its layers don't fit the GPU memory budget. Raising Memory usage in Preferences › Performance raises the budget, up to a quarter of this computer's memory.	Слои не помещаются в бюджет памяти GPU. Увеличение параметра «Память» в разделе Настройки › Производительность повышает бюджет, но не больше четверти памяти этого компьютера.
+	The GPU compositor wasn't used: {reason}	Компоновщик GPU не использовался: {reason}
+fontWeight	Thin	Тонкий
+fontWeight	ExtraLight	Особо светлый
+fontWeight	Light	Светлый
+fontWeight	Regular	Обычный
+fontWeight	Medium	Средний
+fontWeight	SemiBold	Полужирный
+fontWeight	Bold	Жирный
+fontWeight	ExtraBold	Особо жирный
+fontWeight	Black	Чёрный
+fontWeight	Italic	Курсив
+
+# Pattern Stamp tool
+	Pattern Stamp Tool	Инструмент узорный штамп
+	Impressionist	Импрессионист
