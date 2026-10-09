@@ -2603,6 +2603,8 @@ cameraRaw	Whites	Brancos
 	Apply At Canvas Bounds	Aplicar efeito nos limites da tela
 	Show/Hide All Panels	Mostrar/ocultar todos os painéis
 	Show/Hide Panels	Mostrar/ocultar painéis
+	Could not open	Não foi possível abrir
+	{path}: the path is not valid Unicode; rename the file and open it again.	{path}: o caminho não é Unicode válido; renomeie o arquivo e abra-o novamente.
 
 # Fill dialog, layer style contours and Image Size
 	Contents:	Conteúdo:

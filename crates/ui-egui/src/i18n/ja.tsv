@@ -2148,6 +2148,8 @@ cameraRaw	Color	カラー
 	Apply At Canvas Bounds	カンバスの境界に効果を適用
 	Show/Hide All Panels	すべてのパネルを表示/非表示
 	Show/Hide Panels	パネルを表示/非表示
+	Could not open	開けませんでした
+	{path}: the path is not valid Unicode; rename the file and open it again.	{path}: パスが有効な Unicode ではありません。ファイル名を変更してから開き直してください。
 
 # Fill dialog, layer style contours and Image Size
 	Contents:	内容:

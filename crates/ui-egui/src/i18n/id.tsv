@@ -2583,6 +2583,8 @@ cameraRaw	Blending	Pembauran
 	Apply At Canvas Bounds	Terapkan efek di batas kanvas
 	Show/Hide All Panels	Tampilkan/Sembunyikan Semua Panel
 	Show/Hide Panels	Tampilkan/Sembunyikan Panel
+	Could not open	Tidak dapat membuka
+	{path}: the path is not valid Unicode; rename the file and open it again.	{path}: jalur bukan Unicode yang valid; ganti nama file lalu buka lagi.
 
 # Fill dialog, layer style contours and Image Size
 	Contents:	Isi:

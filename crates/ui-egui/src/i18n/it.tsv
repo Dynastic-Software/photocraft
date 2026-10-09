@@ -2239,6 +2239,8 @@ cameraRaw	Amount	Quantità
 	Apply At Canvas Bounds	Applica effetto ai limiti dell’area di lavoro
 	Show/Hide All Panels	Mostra/nascondi tutti i pannelli
 	Show/Hide Panels	Mostra/nascondi pannelli
+	Could not open	Impossibile aprire
+	{path}: the path is not valid Unicode; rename the file and open it again.	{path}: il percorso non è Unicode valido; rinomina il file e riaprilo.
 
 # Fill dialog, layer style contours and Image Size
 	Contents:	Contenuto:
