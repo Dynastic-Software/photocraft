@@ -33,3 +33,8 @@ sync_github_name = true
 
 [people.ArthurViniciusBA1]
 real_name = "Arthur Vinicius"
+
+[people.GamerWil26]
+real_name = "Willy Foo"
+display_name = "Willy Foo"
+sync_github_name = false
