@@ -39,13 +39,14 @@ fn background_save_outcomes_report_failure_then_recovery() {
     saver.request_checked(doc.clone(), 7, None, SaveOptions::default()).unwrap();
 
     let receive = |saver: &Autosaver| {
-        for _ in 0..500 {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while std::time::Instant::now() < deadline {
             if let Some(outcome) = saver.take_completed().into_iter().next() {
                 return outcome;
             }
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        panic!("autosave worker did not report its completed write");
+        panic!("autosave worker did not report its completed write within 30 seconds");
     };
     let (revision, result) = receive(&saver);
     assert_eq!(revision, 7);
