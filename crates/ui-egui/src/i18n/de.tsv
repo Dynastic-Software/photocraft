@@ -1794,6 +1794,7 @@
 	Maximize psd compatibility	PSD-Kompatibilität maximieren
 	Medium gray	Mittelgrau
 	Memory usage mb	Speichernutzung (MB)
+	Low resolution previews	Vorschau in niedriger Auflösung
 	Missing glyph protection	Schutz vor fehlenden Glyphen
 	Modern	Modern
 	Nearest neighbor	Nächster Nachbar
@@ -1947,6 +1948,8 @@
 	Brush Settings…  (F5): every option of this brush	Pinseleinstellungen…  (F5): jede Option dieses Pinsels
 	Rename Brush…	Pinsel umbenennen…
 	Delete Brush	Pinsel löschen
+	New Brush Preset…	Neue Pinselvorgabe…
+	Brush Preset Options	Pinselvorgaben-Optionen
 	Group name	Gruppenname
 	Brush name	Pinselname
 	Grid view	Rasteransicht
@@ -2149,6 +2152,7 @@
 	Magnetic Lasso Tool	Magnetisches-Lasso-Werkzeug
 	Frequency	Frequenz
 	Use tablet pressure to change pen width	Tablettdruck zum Ändern der Stiftbreite verwenden
+
 # About ▸ Contributors / Models (credits, craftrules standards/contributors.md)
 	About	Über
 	Contributors	Mitwirkende
@@ -2180,6 +2184,32 @@
 	% of all commits	% aller Commits
 	Lines +/−	Zeilen +/−
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binAdded} / −{binDeleted} binary assets, {first} – {last}	@{login}: {prs} PRs, {commits} Commits, +{added} / −{deleted} Zeilen (Δ {delta}), +{binAdded} / −{binDeleted} Binärdateien, {first} – {last}
+
+# Layer Style > Blending Options (Advanced Blending)
+	Blend If:	Farbbereich:
+	Channels:	Kanäle:
+	Knockout	Aussparung
 	Apply At Canvas Bounds	Effekt an Arbeitsflächenbegrenzungen anwenden
 	Show/Hide All Panels	Alle Bedienfelder ein-/ausblenden
 	Show/Hide Panels	Bedienfelder ein-/ausblenden
+
+# Fill dialog, layer style contours and Image Size
+	Contents:	Inhalt:
+	Custom Pattern:	Eigenes Muster:
+	Foreground Color	Vordergrundfarbe
+	Color…	Farbe…
+	50% Gray	50 % Grau
+	{size} (was {old})	{size} (vorher {old})
+	Cone	Kegel
+	Cone (Inverted)	Kegel (umgekehrt)
+	Domed	Gewölbt
+	Domed (Inverted)	Gewölbt (umgekehrt)
+	Diagonal (Descending)	Diagonal (absteigend)
+
+	Red Eye Tool	Rote-Augen-Werkzeug
+	Red Eye	Rote Augen
+	Pupil Size	Pupillengröße
+	Darken Amount	Abdunklungsgrad
+	Click a red pupil to neutralize it	Klicken Sie auf eine rote Pupille
+	open source	Open Source
+	…and {n} more	…und {n} weitere
