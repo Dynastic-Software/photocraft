@@ -244,11 +244,7 @@ fn background_job_finishes_bookkeeping_on_edited_document_after_tab_switch() {
             |s, ()| {
                 s.edit("Deferred Blur", |doc, active| {
                     let layer = active.ok_or_else(|| EngineError::Other("no active layer".into()))?;
-                    let surface = doc
-                        .layer_mut(layer)
-                        .ok_or(EngineError::NoLayer(layer))?
-                        .surface_mut()
-                        .ok_or(EngineError::NoLayer(layer))?;
+                    let surface = doc.layer_mut(layer).ok_or(EngineError::NoLayer(layer))?.surface_mut().ok_or(EngineError::NoLayer(layer))?;
                     surface.fill_rect(photocraft_geom::Rect::new(0, 0, 1, 1), &[0.4, 0.3, 0.2, 1.0]);
                     Ok(())
                 })?;
@@ -269,11 +265,7 @@ fn background_job_finishes_bookkeeping_on_edited_document_after_tab_switch() {
     assert_eq!(s.active_index(), Some(1), "the user stays on the selected document");
     assert_eq!(s.documents()[1].revision, viewed_revision, "the viewed document is unchanged");
     assert_eq!(s.documents()[1].doc.id, viewed_doc);
-    assert_eq!(
-        s.edit_state.fade.as_ref().map(|fade| fade.doc),
-        Some(edited_doc),
-        "Fade belongs to the edited document"
-    );
+    assert_eq!(s.edit_state.fade.as_ref().map(|fade| fade.doc), Some(edited_doc), "Fade belongs to the edited document");
     assert!(!s.is_enabled("edit.fade"), "Fade must not target the viewed document");
 
     assert!(s.set_active(0));
