@@ -1386,9 +1386,19 @@ mod tests {
         );
         PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ProMedium);
         h.run_steps(3);
-        let boxes =
-            h.output().shapes.iter().filter(|c| matches!(&c.shape, egui::Shape::Rect(r) if r.rect.size() == vec2(14.0, 14.0) && r.stroke.width > 0.0)).count();
-        assert_eq!(boxes, KINDS.len(), "one empty checkbox per effect row");
+        let boxes: Vec<egui::Rect> = h
+            .output()
+            .shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Rect(r) if r.rect.size() == vec2(14.0, 14.0) && r.stroke.width > 0.0 => Some(r.rect),
+                _ => None,
+            })
+            .collect();
+        // The effect list is the leftmost column; the selected pane draws checkboxes of its own.
+        let column = boxes.iter().map(|r| r.min.x).fold(f32::INFINITY, f32::min);
+        let rows = boxes.iter().filter(|r| (r.min.x - column).abs() < 0.5).count();
+        assert_eq!(rows, KINDS.len(), "one empty checkbox per effect row");
     }
 
     #[test]
