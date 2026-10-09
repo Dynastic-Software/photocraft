@@ -158,13 +158,7 @@ impl Drop for Autosaver {
     }
 }
 
-fn worker(
-    rx: Receiver<Job>,
-    bundle: PathBuf,
-    sidecar: PathBuf,
-    last: Arc<Mutex<Option<Result<SaveStats>>>>,
-    completed: CompletedWrites,
-) {
+fn worker(rx: Receiver<Job>, bundle: PathBuf, sidecar: PathBuf, last: Arc<Mutex<Option<Result<SaveStats>>>>, completed: CompletedWrites) {
     let mut writer = PcraftWriter::new();
     while let Ok(mut job) = rx.recv() {
         // Coalesce: skip to the newest queued snapshot.
