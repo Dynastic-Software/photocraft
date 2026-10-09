@@ -420,6 +420,96 @@ fn fill_layers_and_colors() {
 }
 
 #[test]
+fn fill_layer_pixel_rewrites_refresh_the_effect_maps() {
+    // A pixel-only rewrite of a fill layer's cache (what Image › Transform and friends do)
+    // leaves the Fill spec alone; the CPU effect maps must follow the cache surface, or the
+    // composite keeps the pre-rewrite drop shadow. Warm render vs. purged render must agree.
+    let mut s = Session::new();
+    s.execute("file.new", json!({"width": 64, "height": 48})).unwrap();
+    s.execute("layer.newFillLayer.gradient", json!({"from": "#000000", "to": "#ffffff", "angle": 0})).unwrap();
+    s.edit("shadow", |doc, active| {
+        doc.layer_mut(active.unwrap()).unwrap().effects.items.push(photocraft_doc::Effect::default_drop_shadow());
+        Ok(())
+    })
+    .unwrap();
+    let render = |s: &Session| {
+        let d = &s.active().unwrap().doc;
+        photocraft_compose::render(d, d.bounds()).px
+    };
+    // Give the layer the cached-pixels state a PSD import produces (the cache is what Image
+    // › Transform & friends rewrite in place, without touching the Fill spec).
+    s.edit("cache", |doc, active| {
+        let fmt = doc.pixel_format();
+        let l = doc.layer_mut(active.unwrap()).unwrap();
+        let photocraft_doc::LayerContent::Fill(f) = &l.content else { return Err(EngineError::Other("not a fill layer".into())) };
+        let fill = f.clone();
+        let mut surface = photocraft_raster::Surface::new(fmt);
+        surface.fill_rect(photocraft_geom::Rect::new(8, 8, 30, 40), &[0.0, 0.0, 1.0, 1.0]);
+        l.fill_cache = Some(photocraft_doc::FillCache { fill, surface });
+        Ok(())
+    })
+    .unwrap();
+    let warm = render(&s); // populate the effect-map cache
+    let warm2 = render(&s);
+    assert_eq!(warm, warm2, "a warm cache does not change the composite");
+    // Rewrite the cached pixels in place, without touching the Fill spec.
+    s.edit("shift", |doc, active| {
+        let l = doc.layer_mut(active.unwrap()).unwrap();
+        let fc = l.fill_cache.as_mut().unwrap();
+        let moved = photocraft_algo::resample::translate_surface(&fc.surface, 12, 0);
+        fc.surface = moved;
+        Ok(())
+    })
+    .unwrap();
+    let after = render(&s);
+    assert_ne!(after, warm, "the rewritten cache changes the composite");
+    photocraft_compose::purge_effect_cache();
+    let fresh = render(&s);
+    assert_eq!(after, fresh, "the effect maps track the cache surface, not the Fill spec alone");
+}
+
+#[test]
+fn group_effect_maps_follow_child_visibility_and_opacity() {
+    // A styled group's maps come from its children's composite: hiding a child or changing its
+    // opacity must refresh the group's shadow. Warm render vs. purged render must agree.
+    let mut s = Session::new();
+    s.execute("file.new", json!({"width": 64, "height": 48, "background": "transparent"})).unwrap();
+    let a = s.execute("layer.new.layer", json!({})).unwrap()["layer"].as_u64().unwrap();
+    s.execute("paint.pencil", json!({"points": [[20, 24]], "size": 12, "color": "#ff0000"})).unwrap();
+    let b = s.execute("layer.new.layer", json!({})).unwrap()["layer"].as_u64().unwrap();
+    s.execute("paint.pencil", json!({"points": [[44, 24]], "size": 12, "color": "#0000ff"})).unwrap();
+    let g = s.execute("layer.new.group", json!({})).unwrap()["layer"].as_u64().unwrap();
+    for l in [a, b] {
+        s.execute("layer.moveTo", json!({"layer": l, "target": g, "position": "into"})).unwrap();
+    }
+    s.edit("shadow", |doc, _| {
+        doc.layer_mut(LayerId(g)).unwrap().effects.items.push(photocraft_doc::Effect::default_drop_shadow());
+        Ok(())
+    })
+    .unwrap();
+    let render = |s: &Session| {
+        let d = &s.active().unwrap().doc;
+        photocraft_compose::render(d, d.bounds()).px
+    };
+    let mut prev = render(&s); // populate the effect-map cache
+    type Edit = (&'static str, fn(&mut photocraft_doc::Layer));
+    let edits: [Edit; 2] = [("hide", |l| l.visible = false), ("opacity", |l| l.opacity = 0.3)];
+    for ((name, edit), child) in edits.into_iter().zip([a, b]) {
+        let child = LayerId(child);
+        s.edit(name, |doc, _| {
+            edit(doc.layer_mut(child).unwrap());
+            Ok(())
+        })
+        .unwrap();
+        let warm = render(&s);
+        assert_ne!(warm, prev, "{name}: the composite changes");
+        photocraft_compose::purge_effect_cache();
+        assert_eq!(warm, render(&s), "{name}: the group's maps follow its children");
+        prev = warm;
+    }
+}
+
+#[test]
 fn journal_records_mutations_only() {
     let mut s = session_with_doc();
     s.execute("document.inspect", json!({})).unwrap();
@@ -467,8 +557,10 @@ fn damage_is_reported_for_strokes_only() {
     s.execute("paint.stroke", json!({"points": [[10, 10], [20, 10]], "size": 4})).unwrap();
     let d = s.active().unwrap().last_damage.unwrap();
     assert!(d.contains(15, 10) && d.width() < 30);
+    // Undo reports the same bounded area back, not a whole-canvas recomposite.
     s.execute("edit.undo", json!({})).unwrap();
-    assert_eq!(s.active().unwrap().last_damage, None);
+    let d = s.active().unwrap().last_damage.unwrap();
+    assert!(d.contains(15, 10) && d.width() < 30);
 }
 
 #[test]
@@ -542,6 +634,157 @@ fn move_to_reorders_and_nests() {
     // one undo step
     s.execute("edit.undo", json!({})).unwrap();
     assert_eq!(names(&s), ["Background", "B", "A", "G"]);
+}
+
+/// ⌥-dragging a Layers panel row: `copy` leaves the layer where it is and drops a duplicate at the
+/// target, as one "Duplicate Layer" step, with the copy active.
+#[test]
+fn move_to_copy_places_a_duplicate_in_one_step() {
+    let mut s = session_with_doc();
+    let a = s.execute("layer.new.layer", json!({"name": "A"})).unwrap()["layer"].as_u64().unwrap();
+    s.execute("edit.fill", json!({"contents": "color", "color": "#ff0000"})).unwrap();
+    let b = s.execute("layer.new.layer", json!({"name": "B"})).unwrap()["layer"].as_u64().unwrap();
+    let g = s.execute("layer.new.group", json!({"name": "G"})).unwrap()["layer"].as_u64().unwrap();
+    let names = |s: &Session| s.active().unwrap().doc.layers.iter().map(|l| l.name.clone()).collect::<Vec<_>>();
+    let steps = |s: &Session| s.active().unwrap().history.past_len();
+    let before = steps(&s);
+    // bottom->top: Background, A, B, G ; copy A above B
+    let r = s.execute("layer.moveTo", json!({"layer": a, "target": b, "position": "above", "copy": true})).unwrap();
+    let copy = r["layer"].as_u64().expect("the copy's id");
+    assert_ne!(copy, a);
+    assert_eq!(names(&s), ["Background", "A", "B", "A copy", "G"]);
+    assert_eq!(steps(&s), before + 1, "one history step");
+    assert_eq!(s.active().unwrap().history.undo_label(), Some("Duplicate Layer"));
+    assert_eq!(s.active().unwrap().active_layer, Some(photocraft_doc::LayerId(copy)), "the copy is active");
+    let doc = &s.active().unwrap().doc;
+    let (orig, dup) = (doc.layer(photocraft_doc::LayerId(a)).unwrap(), doc.layer(photocraft_doc::LayerId(copy)).unwrap());
+    assert_eq!(orig.content, dup.content, "the pixels are copied");
+    // Below and into a group.
+    s.execute("layer.moveTo", json!({"layer": b, "target": a, "position": "below", "copy": true})).unwrap();
+    assert_eq!(names(&s), ["Background", "B copy", "A", "B", "A copy", "G"]);
+    s.execute("layer.moveTo", json!({"layer": a, "target": g, "position": "into", "copy": true})).unwrap();
+    // `document.inspect` lists the top of the stack first; "A copy" is taken, so this is "A copy 2".
+    assert_eq!(s.execute("document.inspect", json!({})).unwrap()["layers"][0]["children"][0]["name"], "A copy 2");
+    // A group can be copied beside itself, but not into itself.
+    s.execute("layer.moveTo", json!({"layer": g, "target": g, "position": "above", "copy": true})).unwrap();
+    assert_eq!(names(&s).last().map(String::as_str), Some("G copy"));
+    let past = steps(&s);
+    assert!(s.execute("layer.moveTo", json!({"layer": g, "target": g, "position": "into", "copy": true})).is_err());
+    assert_eq!(steps(&s), past, "a refused copy records nothing");
+    // A copy of the Background is an ordinary, unlocked layer.
+    let bg = s.active().unwrap().doc.layers[0].id.0;
+    s.execute("layer.moveTo", json!({"layer": bg, "target": b, "position": "above", "copy": true})).unwrap();
+    let doc = &s.active().unwrap().doc;
+    let bg_copy = doc.layers.iter().find(|l| l.name == "Background copy").expect("a Background copy");
+    assert!(!bg_copy.locks.transparency);
+    assert!(doc.layers[0].locks.transparency, "the Background keeps its lock");
+    // Undo removes each copy and nothing else.
+    for _ in 0..5 {
+        s.execute("edit.undo", json!({})).unwrap();
+    }
+    assert_eq!(names(&s), ["Background", "A", "B", "G"]);
+}
+
+#[test]
+fn move_to_copy_rejects_bad_params() {
+    let mut s = session_with_doc();
+    let a = s.execute("layer.new.layer", json!({"name": "A"})).unwrap()["layer"].as_u64().unwrap();
+    let past = s.active().unwrap().history.past_len();
+    for p in [
+        json!({"layer": a, "copy": true}),
+        json!({"layer": a, "target": "x", "copy": true}),
+        json!({"layer": a, "target": 9_999_999, "copy": true}),
+        json!({"layer": 9_999_999, "target": a, "copy": true}),
+        json!({"layer": a, "target": a, "position": "into", "copy": true}),
+    ] {
+        assert!(s.execute("layer.moveTo", p.clone()).is_err(), "{p}");
+    }
+    assert_eq!(s.active().unwrap().history.past_len(), past, "no history step recorded");
+    assert_eq!(s.active().unwrap().doc.layers.len(), 2);
+}
+
+#[test]
+fn move_selected_layers_into_existing_group_preserves_order_selection_and_one_undo() {
+    let mut s = session_with_doc();
+    let a = s.execute("layer.new.layer", json!({"name": "A"})).unwrap()["layer"].as_u64().unwrap();
+    let b = s.execute("layer.new.layer", json!({"name": "B"})).unwrap()["layer"].as_u64().unwrap();
+    let c = s.execute("layer.new.layer", json!({"name": "C"})).unwrap()["layer"].as_u64().unwrap();
+    let g = s.execute("layer.new.group", json!({"name": "Existing Group"})).unwrap()["layer"].as_u64().unwrap();
+    s.execute("layer.select", json!({"layer": a})).unwrap();
+    s.execute("layer.select", json!({"layer": c, "mode": "add"})).unwrap();
+
+    let past = s.active().unwrap().history.past_len();
+    // Pass reversed IDs deliberately. The document order (A below C) must win.
+    let r = s.execute("layer.moveTo", json!({"layers": [c, a], "target": g, "position": "into"})).unwrap();
+    assert_eq!(r["moved"], 2);
+    let st = s.active().unwrap();
+    let root: Vec<_> = st.doc.layers.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(root, ["Background", "B", "Existing Group"]);
+    let names: Vec<_> = st.doc.layer(LayerId(g)).unwrap().children().unwrap().iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, ["A", "C"]);
+    assert_eq!(st.history.past_len(), past + 1, "one drag = one undo step");
+    assert_eq!(st.active_layer, Some(LayerId(c)), "preserve the active member");
+    assert!(st.selected_layers().contains(&LayerId(a)));
+    assert!(st.selected_layers().contains(&LayerId(c)));
+
+    s.execute("edit.undo", json!({})).unwrap();
+    let root: Vec<_> = s.active().unwrap().doc.layers.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(root, ["Background", "A", "B", "C", "Existing Group"]);
+    assert!(s.active().unwrap().doc.layer(LayerId(g)).unwrap().children().unwrap().is_empty());
+    s.execute("edit.redo", json!({})).unwrap();
+    assert_eq!(s.active().unwrap().doc.layer(LayerId(g)).unwrap().children().unwrap().len(), 2);
+    assert_eq!(b, s.active().unwrap().doc.layers[1].id.0);
+}
+
+#[test]
+fn move_selected_layers_keeps_selected_group_children_and_supports_above_below() {
+    let mut s = session_with_doc();
+    let a = s.execute("layer.new.layer", json!({"name": "A"})).unwrap()["layer"].as_u64().unwrap();
+    let b = s.execute("layer.new.layer", json!({"name": "B"})).unwrap()["layer"].as_u64().unwrap();
+    let c = s.execute("layer.new.layer", json!({"name": "C"})).unwrap()["layer"].as_u64().unwrap();
+    let group = s.execute("layer.new.group", json!({"name": "G"})).unwrap()["layer"].as_u64().unwrap();
+    // Made before B moves into G: a new group goes above the active layer, which would then be inside G.
+    let target = s.execute("layer.new.group", json!({"name": "Target"})).unwrap()["layer"].as_u64().unwrap();
+    s.execute("layer.moveTo", json!({"layer": b, "target": group, "position": "into"})).unwrap();
+
+    let r = s.execute("layer.moveTo", json!({"layers": [b, group, a], "target": target, "position": "into"})).unwrap();
+    assert_eq!(r["moved"], 2, "moving a group already carries its selected child");
+    let target_children = s.active().unwrap().doc.layer(LayerId(target)).unwrap().children().unwrap();
+    assert_eq!(target_children.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(), ["A", "G"]);
+    assert_eq!(target_children[1].children().unwrap()[0].id.0, b);
+    assert!(s.active().unwrap().selected_layers().contains(&LayerId(b)), "nested selected child is still selected");
+
+    s.execute("layer.moveTo", json!({"layers": [group, a], "target": c, "position": "above"})).unwrap();
+    assert_eq!(s.active().unwrap().doc.layers.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(), ["Background", "C", "A", "G", "Target"]);
+    s.execute("layer.moveTo", json!({"layers": [group, a], "target": c, "position": "below"})).unwrap();
+    assert_eq!(s.active().unwrap().doc.layers.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(), ["Background", "A", "G", "C", "Target"]);
+}
+
+#[test]
+fn move_selected_layers_invalid_targets_leave_document_and_history_unchanged() {
+    let mut s = session_with_doc();
+    let a = s.execute("layer.new.layer", json!({"name": "A"})).unwrap()["layer"].as_u64().unwrap();
+    let g = s.execute("layer.new.group", json!({"name": "G"})).unwrap()["layer"].as_u64().unwrap();
+    s.execute("layer.moveTo", json!({"layer": a, "target": g, "position": "into"})).unwrap();
+    let outside = s.execute("layer.new.layer", json!({"name": "Outside"})).unwrap()["layer"].as_u64().unwrap();
+    let root = s.active().unwrap().doc.layers.clone();
+    let past = s.active().unwrap().history.past_len();
+    for params in [
+        json!({"layers": [g, a], "target": a, "position": "into"}),
+        json!({"layers": [g], "target": g, "position": "above"}),
+        json!({"layers": [g, outside], "target": g, "position": "into"}),
+        json!({"layers": [g, outside], "target": a, "position": "below"}),
+        json!({"layers": [a], "target": outside, "position": "into"}),
+        json!({"layers": [a, a], "target": outside}),
+        json!({"layers": [a, "bogus"], "target": outside}),
+        json!({"layers": [], "target": outside}),
+        json!({"layers": [u64::MAX], "target": outside}),
+        json!({"layers": [a], "target": outside, "position": "sideways"}),
+    ] {
+        assert!(s.execute("layer.moveTo", params.clone()).is_err(), "{params}");
+        assert_eq!(s.active().unwrap().history.past_len(), past, "{params}: no history step");
+        assert_eq!(s.active().unwrap().doc.layers, root, "{params}: layers unchanged");
+    }
 }
 
 #[test]

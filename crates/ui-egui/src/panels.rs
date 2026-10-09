@@ -1,6 +1,6 @@
 //! Chrome around the canvas: title bar, options bar, toolbar, status bar, dock cards, Properties.
 
-use egui::{Align2, Color32, CornerRadius, Rect, RichText, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Align2, Color32, CornerRadius, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use photocraft_color::BlendMode;
 use photocraft_doc::{Layer, LayerContent, LayerId};
 use serde_json::{Value, json};
@@ -24,7 +24,7 @@ const TOOL_SECTIONS: &[&[&[Tool]]] = &[
         &[Tool::Eyedropper, Tool::Ruler, Tool::Note, Tool::Count],
     ],
     &[
-        &[Tool::SpotHealing, Tool::Healing, Tool::Patch, Tool::ContentAwareMove],
+        &[Tool::SpotHealing, Tool::Healing, Tool::Patch, Tool::ContentAwareMove, Tool::RedEye],
         &[Tool::Brush, Tool::Pencil, Tool::MixerBrush],
         &[Tool::CloneStamp],
         &[Tool::HistoryBrush],
@@ -54,9 +54,9 @@ fn slot_tool(ui: &egui::Ui, current: Tool, slot: &[Tool], key: egui::Id) -> Tool
 pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let (w1, bx, m) = if t.pro { (40.0, 30.0, 5i8) } else { (50.0, 36.0, 7i8) };
-    // Photoshop switches to a double-column toolbar only when one column doesn't fit.
+    // Two columns when the header chevron asks for them, or when one column doesn't fit.
     let slots: usize = TOOL_SECTIONS.iter().map(|g| g.len()).sum();
-    let double = toolbar_needs_double(slots, TOOL_SECTIONS.len(), bx, t.pro, ui.available_rect_before_wrap().height());
+    let double = app.ui.panels.toolbar_double || toolbar_needs_double(slots, TOOL_SECTIONS.len(), bx, t.pro, ui.available_rect_before_wrap().height());
     let w = if double { w1 + bx + 2.0 } else { w1 };
     egui::Panel::left("toolbar").resizable(false).exact_size(w).frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(m, 8))).show(
         ui,
@@ -64,9 +64,13 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             if t.pro {
                 let r = ui.max_rect();
                 ui.painter().line_segment([r.right_top() + vec2(m as f32, -8.0), r.right_bottom() + vec2(m as f32, 8.0)], Stroke::new(1.0, t.separator));
-                // collapse chevrons like Photoshop's toolbar header
-                let (cr, _) = ui.allocate_exact_size(vec2(bx, 14.0), Sense::hover());
-                icons::paint(ui, cr, "chevrons-right", 11.0, t.text_faint);
+                // Photoshop's toolbar header chevrons switch between one and two columns.
+                let (cr, resp) = ui.allocate_exact_size(vec2(bx, 14.0), Sense::click());
+                icons::paint(ui, cr, if double { "chevrons-left" } else { "chevrons-right" }, 11.0, if resp.hovered() { t.text } else { t.text_faint });
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Toolbar")));
+                if resp.clicked() {
+                    app.ui.panels.toolbar_double = !app.ui.panels.toolbar_double;
+                }
                 ui.add_space(4.0);
             }
             // Subtle violet wash at the bottom of the toolbar.
@@ -91,7 +95,10 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 ui.data_mut(|d| d.remove::<egui::Id>(held_id));
             }
             let mut slot_index = 0usize;
-            for (si, section) in TOOL_SECTIONS.iter().enumerate() {
+            // Pro has no group dividers, so its two columns fill every row across groups.
+            let flat: Vec<&[Tool]> = TOOL_SECTIONS.iter().flat_map(|s| s.iter().copied()).collect();
+            let sections: Vec<&[&[Tool]]> = if t.pro { vec![&flat[..]] } else { TOOL_SECTIONS.to_vec() };
+            for (si, section) in sections.iter().enumerate() {
                 // Photoshop 2026 draws one uninterrupted column (no group dividers).
                 if si > 0 && !t.pro {
                     ui.add_space(4.0);
@@ -485,11 +492,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 let tool = app.ui.tool;
                 // Brush edits here go through `tools.setBrush`, one journal entry per gesture (Rule 1).
                 if (tool.is_brushlike() && !matches!(tool, Tool::Brush | Tool::Pencil | Tool::MixerBrush | Tool::Eraser)) || tool == Tool::QuickSelection {
-                    let before = app.session.tools.brush.clone();
-                    let mut b = before.clone();
-                    let pick = brush_preset_chip(ui, &mut b, &app.session.tools.presets);
-                    crate::brush_panel::commit_gesture(app, ui.ctx(), &before, &b);
-                    crate::brush_picker::apply(app, ui.ctx(), pick);
+                    brush_preset_chip(ui, &app.session.tools.brush, &mut app.ui);
                     crate::brush_picker::settings_toggle(app, ui);
                     widgets::vline(ui, 22.0);
                 }
@@ -505,10 +508,9 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 let brush_before = app.session.tools.brush.clone();
                 let mut brush = brush_before.clone();
                 let b = &mut brush;
-                let mut picked = None;
                 match app.ui.tool {
                     Tool::Brush | Tool::Eraser if t.pro => {
-                        picked = brush_preset_chip(ui, b, &app.session.tools.presets);
+                        brush_preset_chip(ui, b, &mut app.ui);
                         crate::brush_picker::settings_toggle(app, ui);
                         widgets::vline(ui, 22.0);
                         opt_label(ui, tl!("Mode"));
@@ -537,7 +539,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     }
                     // Pencil: Photoshop's options (no hardness or flow: the pencil is always hard).
                     Tool::Pencil => {
-                        picked = brush_preset_chip(ui, b, &app.session.tools.presets);
+                        brush_preset_chip(ui, b, &mut app.ui);
                         crate::brush_picker::settings_toggle(app, ui);
                         widgets::vline(ui, 22.0);
                         if !t.pro {
@@ -558,7 +560,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         widgets::checkbox(ui, &mut app.ui.tool_options.pencil_auto_erase, tl!("Auto Erase"));
                     }
                     Tool::Brush | Tool::Eraser => {
-                        picked = brush_preset_chip(ui, b, &app.session.tools.presets);
+                        brush_preset_chip(ui, b, &mut app.ui);
                         crate::brush_picker::settings_toggle(app, ui);
                         widgets::vline(ui, 22.0);
                         opt_label(ui, tl!("Size"));
@@ -574,7 +576,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         widgets::toggle(ui, &mut b.pressure_opacity, tl!("Pressure for Opacity"));
                     }
                     Tool::MixerBrush => {
-                        picked = brush_preset_chip(ui, b, &app.session.tools.presets);
+                        brush_preset_chip(ui, b, &mut app.ui);
                         crate::brush_picker::settings_toggle(app, ui);
                         widgets::vline(ui, 22.0);
                         for (label, value) in [
@@ -722,12 +724,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         if widgets::dropdown(ui, "gradient-mode", &mut classic, &[(false, "Gradient"), (true, "Classic gradient")], 118.0) {
                             app.ui.tool_options.gradient_classic = classic;
                         }
-                        let (fg, bg) = (app.session.tools.foreground, app.session.tools.background);
-                        if classic {
-                            gradient_swatch(ui, fg, bg);
-                        } else {
-                            crate::gradient_ui::preset_swatch(ui, &app.session.presets.gradient.resolve(fg, bg));
-                        }
+                        crate::gradient_ui::preset_swatch(app, ui);
                         widgets::vline(ui, 22.0);
                         ui.spacing_mut().item_spacing.x = 2.0;
                         let before = app.ui.tool_options.clone();
@@ -876,7 +873,28 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                             app.ui.views[i].zoom = 1.0;
                         }
                     }
-                    Tool::Hand => hint(ui, tl!("Drag to pan  ·  hold Space with any tool")),
+                    Tool::Hand => {
+                        hint(ui, tl!("Drag to pan  ·  hold Space with any tool"));
+                        if widgets::secondary_button(ui, "100%", 0.0).clicked()
+                            && let Some(i) = app.session.active_index()
+                        {
+                            app.ui.views[i].zoom = 1.0;
+                            app.ui.views[i].fit_pending = false;
+                            app.ui.views[i].fill_pending = false;
+                        }
+                        if widgets::secondary_button(ui, tl!("Fit Screen"), 0.0).clicked()
+                            && let Some(i) = app.session.active_index()
+                        {
+                            app.ui.views[i].fit_pending = true;
+                            app.ui.views[i].fill_pending = false;
+                        }
+                        if widgets::secondary_button(ui, tl!("Fill Screen"), 0.0).clicked()
+                            && let Some(i) = app.session.active_index()
+                        {
+                            app.ui.views[i].fill_pending = true;
+                            app.ui.views[i].fit_pending = false;
+                        }
+                    }
                     Tool::Lasso | Tool::PolygonLasso => hint(
                         ui,
                         &crate::i18n::fmt(
@@ -909,7 +927,6 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     _ => {}
                 }
                 crate::brush_panel::commit_gesture(app, ui.ctx(), &brush_before, &brush);
-                crate::brush_picker::apply(app, ui.ctx(), picked);
             });
         });
 }
@@ -1338,12 +1355,15 @@ fn color_picker(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         crate::type_tool::foreground_changed(app);
     }
     let [r, g, b, _] = hsva.to_srgba_unmultiplied();
-    let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
         let (sw, _) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::hover());
         ui.painter().rect_filled(sw, 6.0, Color32::from_rgb(r, g, b));
-        ui.label(RichText::new(format!("#{r:02X}{g:02X}{b:02X}")).font(theme::mono(12.5)).color(t.text));
-        ui.label(RichText::new(format!("RGB {r} {g} {b}")).font(theme::mono(11.5)).color(t.text_faint));
+        let mut c = app.session.tools.foreground;
+        if color_readout(ui, ui.id().with("color-panel"), &mut c) {
+            app.session.tools.foreground = c;
+            ui.data_mut(|d| d.insert_temp(key, srgb_hsva(c)));
+            crate::type_tool::foreground_changed(app);
+        }
     });
 }
 
@@ -1366,6 +1386,28 @@ fn simple_lock_toggle(background: bool, l: &Layer) -> (String, Value) {
 
 fn blend_options(groups: bool) -> Vec<(BlendMode, &'static str)> {
     std::iter::once(BlendMode::PassThrough).filter(|_| groups).chain(BlendMode::LAYER_MODES).map(|m| (m, m.label())).collect()
+}
+
+/// Scroll the Layers panel while holding a layer drag over its top/bottom edge.
+///
+/// Returns the *content* displacement in points for this frame, so positive moves the
+/// list downward (reveals rows above) and negative upward (reveals rows below).
+/// The speed ramps with proximity to the edge and uses elapsed time instead of
+/// assuming a particular refresh rate.
+fn layer_drag_edge_scroll(pointer: Option<Pos2>, viewport: Rect, dragging: bool, dt: f32) -> f32 {
+    if !dragging || viewport.width() <= 0.0 || viewport.height() <= 0.0 {
+        return 0.0;
+    }
+    let Some(pointer) = pointer.filter(|p| viewport.contains(*p)) else { return 0.0 };
+    let edge = 32.0_f32.min(viewport.height() * 0.25);
+    let top = (edge - (pointer.y - viewport.top())).max(0.0) / edge;
+    let bottom = (edge - (viewport.bottom() - pointer.y)).max(0.0) / edge;
+    let direction = top - bottom;
+    if direction == 0.0 {
+        return 0.0;
+    }
+    let velocity = 80.0 + 520.0 * direction.abs();
+    direction.signum() * velocity * dt.clamp(0.0, 0.05)
 }
 
 fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
@@ -1496,6 +1538,15 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         .min_scrolled_height(if fill { rows_h } else { 0.0 })
         .auto_shrink([false, !fill])
         .show(ui, |ui| {
+            // The drag key is set only by actual layer-row drags, not clicks or
+            // ordinary scrolling. The ScrollArea applies this to its own content.
+            let dragging = ctx.data(|d| d.get_temp::<u64>(egui::Id::new("layer-drag"))).is_some() && ctx.input(|i| i.pointer.primary_down());
+            let pointer = ctx.input(|i| i.pointer.interact_pos());
+            let delta = layer_drag_edge_scroll(pointer, ui.clip_rect(), dragging, ctx.input(|i| i.stable_dt));
+            if delta != 0.0 {
+                ui.scroll_with_delta(vec2(0.0, delta));
+                ctx.request_repaint();
+            }
             let filter = app.ui.layer_filter.clone();
             let fx_collapsed = app.session.active().map(|d| d.fx_collapsed.clone()).unwrap_or_default();
             crate::layer_row_ui::begin(ui.ctx());
@@ -1766,7 +1817,7 @@ fn layer_row(
     // Photoshop's default (medium) thumbnails: 32 pt rows.
     let row_h = if t.pro { 32.0 } else { 46.0 };
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), Sense::click_and_drag());
-    layer_drag_and_drop(ctx, ui, l, rect, &resp, actions);
+    layer_drag_and_drop(app, ctx, ui, l, rect, &resp, actions);
     if resp.drag_started() {
         crate::layer_transfer::begin_from_panel(app, ctx, l.id);
     }
@@ -2425,11 +2476,22 @@ fn color_field(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             ui.data_mut(|d| d.insert_temp(key, hsva.h));
         }
     });
-    let [r, g, b, _] = hsva.to_srgba_unmultiplied();
     ui.add_space(6.0);
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("#{r:02X}{g:02X}{b:02X}")).font(theme::mono(12.0)).color(t.text));
-        ui.label(RichText::new(format!("R {r}  G {g}  B {b}")).font(theme::mono(11.0)).color(t.text_faint));
+        let mut c = if bg_active { app.session.tools.background } else { app.session.tools.foreground };
+        if color_readout(ui, ui.id().with(("color-field", bg_active)), &mut c) {
+            if bg_active {
+                app.session.tools.background = c;
+            } else {
+                app.session.tools.foreground = c;
+                crate::type_tool::foreground_changed(app);
+            }
+            // Keep the hue for greys, so the field marker doesn't jump to red.
+            let h = srgb_hsva(c);
+            if h.s >= 0.01 && h.v >= 0.01 {
+                ui.data_mut(|d| d.insert_temp(key, h.h));
+            }
+        }
     });
 }
 
@@ -2447,6 +2509,65 @@ fn srgb_hsva(c: [f32; 4]) -> egui::ecolor::Hsva {
 fn hsva_srgb(h: egui::ecolor::Hsva) -> [f32; 4] {
     let [r, g, b] = h.to_srgb();
     [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+}
+
+/// The Color panel's editable colour readout: a hex field and R, G, B fields, all drawn like the
+/// dock's [`widgets::value_field`] so they sit in the theme. Editing any of them sets `color`
+/// (sRGB-encoded floats) and returns `true`.
+fn color_readout(ui: &mut egui::Ui, id: egui::Id, color: &mut [f32; 4]) -> bool {
+    let t = Tokens::get(ui.ctx());
+    let mut changed = false;
+    // Wrapped so the fields fold onto a second line in a narrow dock instead of being clipped.
+    ui.horizontal_wrapped(|ui| {
+        // Docks zero the item spacing; keep the fields apart.
+        ui.spacing_mut().item_spacing.x = 4.0;
+        ui.label(RichText::new("#").font(theme::mono(12.0)).color(t.text_faint));
+        changed = hex_edit(ui, id.with("hex"), color);
+        let [mut r, mut g, mut b] = srgb_bytes(*color).map(f32::from);
+        let mut rgb = false;
+        for (label, v) in [("R", &mut r), ("G", &mut g), ("B", &mut b)] {
+            ui.label(RichText::new(label).font(theme::mono(11.0)).color(t.text_faint));
+            rgb |= widgets::value_field(ui, v, 0.0..=255.0, "", 38.0).changed();
+        }
+        if rgb {
+            *color = [r / 255.0, g / 255.0, b / 255.0, 1.0];
+            changed = true;
+        }
+    });
+    changed
+}
+
+/// The hex field of [`color_readout`]: type a colour with or without the leading `#`. Valid input
+/// sets `color` and returns `true`. While it has focus it shows exactly what is typed, so partial
+/// or invalid input isn't overwritten by the colour; an invalid entry snaps back when focus leaves.
+fn hex_edit(ui: &mut egui::Ui, id: egui::Id, color: &mut [f32; 4]) -> bool {
+    let t = Tokens::get(ui.ctx());
+    let (rect, _) = ui.allocate_exact_size(vec2(64.0, 24.0), Sense::hover());
+    widgets::surface(ui, rect, t.field, false);
+    if !t.bevel {
+        ui.painter().rect_stroke(rect, t.radius_sm, Stroke::new(1.0, t.field_border), StrokeKind::Inside);
+    }
+    let [r, g, b] = srgb_bytes(*color);
+    let typing = if ui.memory(|m| m.has_focus(id)) { ui.data(|d| d.get_temp::<String>(id)) } else { None };
+    let mut text = typing.unwrap_or_else(|| format!("{r:02X}{g:02X}{b:02X}"));
+    let field = rect.shrink2(vec2(5.0, 2.0));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(field).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    // Room for a pasted "#rrggbb"; the parse trims it, and the field shows plain digits otherwise.
+    // `Frame::NONE`: the themed surface above is this field's frame.
+    let resp =
+        child.add(egui::TextEdit::singleline(&mut text).id(id).char_limit(7).desired_width(field.width()).frame(egui::Frame::NONE).font(theme::mono(12.0)));
+    if resp.has_focus() {
+        ui.data_mut(|d| d.insert_temp(id, text.clone()));
+    } else {
+        ui.data_mut(|d| d.remove::<String>(id));
+    }
+    if resp.changed()
+        && let Some(c) = crate::color_picker_ui::parse_hex(&text)
+    {
+        *color = [c[0], c[1], c[2], 1.0];
+        return true;
+    }
+    false
 }
 
 /// Photoshop's brush preset picker chip: a soft/hard round tip preview with the size underneath.
@@ -2532,16 +2653,13 @@ fn symmetry_menu(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     });
 }
 
-/// Options-bar brush chip; opens Photoshop's Brush Preset picker (size, hardness, the preset
-/// library). Returns what the picker asked for beyond the size and hardness edits in `b`.
-fn brush_preset_chip(
-    ui: &mut egui::Ui,
-    b: &mut photocraft_engine::BrushSettings,
-    presets: &[photocraft_engine::paint::BrushPreset],
-) -> Option<crate::brush_picker::Pick> {
+/// Options-bar brush chip: a click shows or hides Photoshop's Brush Preset picker below it (size,
+/// hardness, the preset library), the one a right-click on the canvas opens.
+fn brush_preset_chip(ui: &mut egui::Ui, b: &photocraft_engine::BrushSettings, state: &mut crate::state::UiState) {
     let t = Tokens::get(ui.ctx());
-    let (r, resp) = ui.allocate_exact_size(vec2(44.0, 30.0), Sense::click());
-    if resp.hovered() {
+    let (r, _) = ui.allocate_exact_size(vec2(44.0, 30.0), Sense::hover());
+    let resp = ui.interact(r, crate::brush_picker::chip_id(), Sense::click());
+    if resp.hovered() || state.brush_picker.is_some() {
         ui.painter().rect_filled(r, t.radius_sm, t.hover);
     }
     let c = pos2(r.left() + 14.0, r.top() + 11.0);
@@ -2549,16 +2667,37 @@ fn brush_preset_chip(
     ui.painter().text(pos2(c.x, r.bottom() - 5.0), Align2::CENTER_CENTER, format!("{}", b.size.round() as i64), egui::FontId::proportional(9.5), t.text_dim);
     icons::paint(ui, Rect::from_center_size(pos2(r.right() - 9.0, c.y), vec2(10.0, 10.0)), "chevron-down", 9.0, t.text_faint);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Brush Preset picker")));
-    let resp = resp.on_hover_text(tl!("Brush Preset picker"));
-    egui::Popup::from_toggle_button_response(&resp)
-        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| crate::brush_picker::body(ui, b, presets))
-        .and_then(|r| r.inner)
+    if resp.on_hover_text(tl!("Brush Preset picker")).clicked() {
+        if state.brush_picker.is_some() {
+            crate::brush_picker::close(state);
+        } else {
+            state.brush_picker = Some([r.left(), r.bottom() + 2.0]);
+        }
+    }
 }
 
-/// Drag a layer row to reorder: drop on the upper/lower half to place above/below, or on the middle
-/// of a group to move into it. One `layer.moveTo` command (one undo step).
-fn layer_drag_and_drop(ctx: &egui::Context, ui: &egui::Ui, l: &Layer, rect: Rect, resp: &egui::Response, actions: &mut Vec<(String, Value)>) {
+/// A drag from within a multi-selection moves the whole selection, not only the grabbed
+/// row. Dragging an unselected row keeps the existing single-layer behavior.
+fn layer_drop_payload(dragged: u64, target: LayerId, position: &str, selected: &[LayerId]) -> Value {
+    if selected.len() > 1 && selected.contains(&LayerId(dragged)) {
+        json!({"layers": selected.iter().map(|id| id.0).collect::<Vec<_>>(), "target": target.0, "position": position})
+    } else {
+        json!({"layer": dragged, "target": target.0, "position": position})
+    }
+}
+
+/// Drag a layer row to reorder: drop above, below, or inside an existing group. With ⌥ held on
+/// release the layers stay put and copies land there instead (Photoshop).
+/// Multi-layer moves are atomic (one undo step), using the engine's stable document order.
+fn layer_drag_and_drop(
+    app: &PhotocraftApp,
+    ctx: &egui::Context,
+    ui: &egui::Ui,
+    l: &Layer,
+    rect: Rect,
+    resp: &egui::Response,
+    actions: &mut Vec<(String, Value)>,
+) {
     let t = Tokens::get(ctx);
     let key = egui::Id::new("layer-drag");
     if resp.drag_started() {
@@ -2567,10 +2706,14 @@ fn layer_drag_and_drop(ctx: &egui::Context, ui: &egui::Ui, l: &Layer, rect: Rect
     let Some(dragged) = ctx.data(|d| d.get_temp::<u64>(key)) else { return };
     let pointer = ctx.input(|i| i.pointer.interact_pos());
     let released = ctx.input(|i| i.pointer.any_released());
+    let copy = ctx.input(|i| i.modifiers.alt);
     if dragged == l.id.0 {
-        // Ghost label following the pointer.
+        // Ghost label following the pointer, and the copy cursor while ⌥ is held.
         if let Some(p) = pointer {
             crate::layer_transfer::ghost(ctx, p, &l.name);
+        }
+        if copy {
+            ctx.set_cursor_icon(egui::CursorIcon::Copy);
         }
         return;
     }
@@ -2599,7 +2742,12 @@ fn layer_drag_and_drop(ctx: &egui::Context, ui: &egui::Ui, l: &Layer, rect: Rect
         }
     }
     if released {
-        actions.push(("layer.moveTo".into(), json!({"layer": dragged, "target": l.id.0, "position": position})));
+        let selected = app.session.active().map(|st| st.selected_layers()).unwrap_or_default();
+        let mut payload = layer_drop_payload(dragged, l.id, position, &selected);
+        if copy && let Some(o) = payload.as_object_mut() {
+            o.insert("copy".into(), json!(true));
+        }
+        actions.push(("layer.moveTo".into(), payload));
     }
 }
 
@@ -2667,22 +2815,6 @@ fn selection_mode_buttons(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     ui.spacing_mut().item_spacing.x = 8.0;
 }
 
-/// Gradient picker swatch (foreground → background), Photoshop options-bar style.
-fn gradient_swatch(ui: &mut egui::Ui, a: [f32; 4], b: [f32; 4]) {
-    let t = Tokens::get(ui.ctx());
-    let (r, resp) = ui.allocate_exact_size(vec2(96.0, 20.0), Sense::click());
-    let mut mesh = egui::Mesh::default();
-    mesh.colored_vertex(r.left_top(), c32(a));
-    mesh.colored_vertex(r.right_top(), c32(b));
-    mesh.colored_vertex(r.right_bottom(), c32(b));
-    mesh.colored_vertex(r.left_bottom(), c32(a));
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(0, 2, 3);
-    ui.painter().add(mesh);
-    ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, t.field_border), StrokeKind::Outside);
-    let _ = resp.on_hover_text(tl!("Click to edit the gradient"));
-}
-
 #[cfg(test)]
 mod color_tests {
     use super::*;
@@ -2695,6 +2827,103 @@ mod color_tests {
                 assert!((back[i] - c[i]).abs() <= 1.0 / 255.0, "{c:?} -> {back:?}");
             }
         }
+    }
+
+    /// Click the hex field, select its text and type `text` one key per frame.
+    fn type_hex(h: &mut egui_kittest::Harness<'static, PhotocraftApp>, text: &str) {
+        use egui_kittest::kittest::Queryable;
+        h.get_by_role(egui::accesskit::Role::TextInput).click();
+        h.run_steps(1);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.run_steps(1);
+        for ch in text.chars() {
+            h.event(egui::Event::Text(ch.to_string()));
+            h.run_steps(1);
+        }
+    }
+
+    /// The Color panel's hex readout is editable, with or without the leading `#`.
+    #[test]
+    fn color_panel_hex_field_takes_a_typed_hex() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.session.tools.foreground = [1.0, 1.0, 1.0, 1.0];
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(300.0, 300.0)).build_ui_state(
+            |ui, app: &mut PhotocraftApp| {
+                if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    color_picker(app, ui);
+                }
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::Studio);
+        h.run_steps(2);
+        type_hex(&mut h, "003300");
+        assert_eq!(srgb_bytes(h.state().session.tools.foreground), [0x00, 0x33, 0x00]);
+        // A leading '#' is accepted too.
+        type_hex(&mut h, "#ff8000");
+        assert_eq!(srgb_bytes(h.state().session.tools.foreground), [0xff, 0x80, 0x00]);
+    }
+
+    /// An incomplete entry never changes the colour and the field snaps back when focus leaves.
+    #[test]
+    fn color_panel_hex_field_ignores_partial_input() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.session.tools.foreground = [0.2, 0.4, 0.6, 1.0];
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(300.0, 300.0)).build_ui_state(
+            |ui, app: &mut PhotocraftApp| {
+                if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    color_picker(app, ui);
+                }
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::Studio);
+        h.run_steps(2);
+        let fg = h.state().session.tools.foreground;
+        h.get_by_role(egui::accesskit::Role::TextInput).click();
+        h.run_steps(1);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.run_steps(1);
+        for ch in "12zz".chars() {
+            h.event(egui::Event::Text(ch.to_string()));
+            h.run_steps(1);
+        }
+        assert_eq!(h.state().session.tools.foreground, fg, "invalid input changes nothing");
+        h.key_press(egui::Key::Tab);
+        h.run_steps(2);
+        assert_eq!(h.get_by_role(egui::accesskit::Role::TextInput).value().as_deref(), Some("336699"), "snaps back to the colour");
+    }
+
+    /// The R, G and B fields next to the hex are editable, like the hex field.
+    #[test]
+    fn color_readout_rgb_fields_take_values() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.session.tools.foreground = [0.0, 0.0, 0.0, 1.0];
+        let mut h = field_harness(app);
+        // The only spin buttons are R, G and B, in that order.
+        h.query_all_by_role(egui::accesskit::Role::SpinButton).nth(1).unwrap().click();
+        h.run_steps(1);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.run_steps(1);
+        for ch in "128".chars() {
+            h.event(egui::Event::Text(ch.to_string()));
+            h.run_steps(1);
+        }
+        h.key_press(egui::Key::Tab);
+        h.run_steps(2);
+        assert_eq!(srgb_bytes(h.state().session.tools.foreground), [0x00, 0x80, 0x00]);
+    }
+
+    /// The pro Color panel's hex readout edits the foreground too.
+    #[test]
+    fn color_field_hex_field_takes_a_typed_hex() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.session.tools.foreground = [1.0, 1.0, 1.0, 1.0];
+        let mut h = field_harness(app);
+        type_hex(&mut h, "003300");
+        assert_eq!(srgb_bytes(h.state().session.tools.foreground), [0x00, 0x33, 0x00]);
     }
 
     #[test]
@@ -3008,6 +3237,13 @@ mod type_flyout_tests {
         assert_eq!(app.ui.tool, Tool::VerticalType);
         assert!(ctx.data(|d| d.get_temp::<(egui::Id, Rect)>(egui::Id::new("tool-flyout"))).is_none());
     }
+
+    #[test]
+    fn red_eye_is_in_the_j_flyout() {
+        let j = TOOL_SECTIONS.iter().flat_map(|section| section.iter()).find(|slot| slot.contains(&Tool::SpotHealing)).expect("J group");
+        assert!(j.contains(&Tool::RedEye), "{j:?}");
+        assert_eq!(j.last(), Some(&Tool::RedEye));
+    }
 }
 
 #[cfg(test)]
@@ -3051,5 +3287,113 @@ mod properties_card_tests {
         h.run_steps(3);
         let doc = &h.state().session.active().unwrap().doc;
         assert_eq!(ids.iter().map(|&id| doc.layer(id).unwrap().opacity).collect::<Vec<_>>(), [0.25, 0.25]);
+    }
+}
+
+#[cfg(test)]
+mod toolbar_tests {
+    use super::*;
+    use egui_kittest::kittest::Queryable;
+
+    /// #1197: the header chevron switches the toolbar between one and two columns.
+    #[test]
+    fn header_chevron_toggles_two_columns() {
+        let app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(800.0, 1400.0)).build_ui_state(
+            |ui, app: &mut PhotocraftApp| {
+                if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    toolbar(app, ui);
+                    let left = ui.available_rect_before_wrap().left();
+                    ui.data_mut(|d| d.insert_temp(egui::Id::new("toolbar-test-left"), left));
+                }
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::Pro);
+        h.run_steps(2);
+        let left = |h: &egui_kittest::Harness<'_, PhotocraftApp>| h.ctx.data(|d| d.get_temp::<f32>(egui::Id::new("toolbar-test-left"))).unwrap_or(0.0);
+        let single = left(&h);
+        assert!(!h.state().ui.panels.toolbar_double);
+
+        h.get_by_label("Toolbar").click();
+        h.run_steps(2);
+        assert!(h.state().ui.panels.toolbar_double);
+        assert!(left(&h) > single + 20.0, "the toolbar did not widen: {single} -> {}", left(&h));
+
+        h.get_by_label("Toolbar").click();
+        h.run_steps(2);
+        assert!(!h.state().ui.panels.toolbar_double);
+        assert_eq!(left(&h), single);
+    }
+}
+
+#[cfg(test)]
+mod layer_drag_edge_scroll_tests {
+    use super::*;
+
+    #[test]
+    fn scrolls_both_edges_with_distance_dependent_velocity() {
+        let viewport = Rect::from_min_max(pos2(10.0, 30.0), pos2(310.0, 330.0));
+        let point = |y| Some(pos2(100.0, y));
+        let near_top = layer_drag_edge_scroll(point(33.0), viewport, true, 1.0 / 60.0);
+        let far_top = layer_drag_edge_scroll(point(53.0), viewport, true, 1.0 / 60.0);
+        let near_bottom = layer_drag_edge_scroll(point(327.0), viewport, true, 1.0 / 60.0);
+        let far_bottom = layer_drag_edge_scroll(point(307.0), viewport, true, 1.0 / 60.0);
+        assert!(near_top > far_top && far_top > 0.0, "approaching the top reveals earlier rows");
+        assert!(near_bottom < far_bottom && far_bottom < 0.0, "approaching the bottom reveals later rows");
+        assert!((near_top + near_bottom).abs() < 1e-5, "symmetric edge behavior");
+        assert_eq!(layer_drag_edge_scroll(point(160.0), viewport, true, 1.0 / 60.0), 0.0);
+    }
+
+    #[test]
+    fn scrolling_stops_outside_or_after_the_drag_finishes() {
+        let viewport = Rect::from_min_max(pos2(10.0, 30.0), pos2(310.0, 330.0));
+        let active = Some(pos2(100.0, 325.0));
+        assert_eq!(layer_drag_edge_scroll(active, viewport, false, 1.0 / 60.0), 0.0);
+        assert_eq!(layer_drag_edge_scroll(None, viewport, true, 1.0 / 60.0), 0.0);
+        assert_eq!(layer_drag_edge_scroll(Some(pos2(9.0, 325.0)), viewport, true, 1.0 / 60.0), 0.0);
+        assert_eq!(layer_drag_edge_scroll(Some(pos2(100.0, 335.0)), viewport, true, 1.0 / 60.0), 0.0);
+        assert_eq!(layer_drag_edge_scroll(active, viewport, true, 0.0), 0.0);
+        let step = layer_drag_edge_scroll(active, viewport, true, 1.0 / 60.0);
+        let twice = layer_drag_edge_scroll(active, viewport, true, 2.0 / 60.0);
+        assert!((twice - step * 2.0).abs() < 1e-4, "time-based scrolling scales across refresh rates");
+        assert!(layer_drag_edge_scroll(active, viewport, true, 0.5).abs() <= 30.0, "long frames have a bounded step");
+    }
+
+    #[test]
+    fn short_viewports_keep_the_edge_zones_disjoint() {
+        let viewport = Rect::from_min_max(pos2(0.0, 0.0), pos2(150.0, 40.0));
+        assert!(layer_drag_edge_scroll(Some(pos2(10.0, 2.0)), viewport, true, 0.016) > 0.0);
+        assert!(layer_drag_edge_scroll(Some(pos2(10.0, 38.0)), viewport, true, 0.016) < 0.0);
+        assert_eq!(layer_drag_edge_scroll(Some(pos2(10.0, 20.0)), viewport, true, 0.016), 0.0);
+    }
+}
+
+#[cfg(test)]
+mod group_drag_selection_tests {
+    use super::*;
+
+    #[test]
+    fn dragging_a_selected_layer_moves_the_complete_selection_into_a_group() {
+        let a = LayerId(10);
+        let b = LayerId(11);
+        let group = LayerId(20);
+        let payload = layer_drop_payload(a.0, group, "into", &[a, b]);
+        assert_eq!(payload, json!({"layers": [10, 11], "target": 20, "position": "into"}));
+        assert_eq!(payload.get("layer"), None, "batch drops must not also send a single layer");
+
+        // Above/below use the same batch route; engine preserves the document stack order.
+        assert_eq!(layer_drop_payload(b.0, group, "above", &[a, b])["position"], "above");
+        assert_eq!(layer_drop_payload(b.0, group, "below", &[a, b])["position"], "below");
+    }
+
+    #[test]
+    fn dragging_unselected_or_singular_row_remains_a_single_layer_move() {
+        let a = LayerId(10);
+        let b = LayerId(11);
+        let group = LayerId(20);
+        assert_eq!(layer_drop_payload(9, group, "into", &[a, b]), json!({"layer": 9, "target": 20, "position": "into"}));
+        assert_eq!(layer_drop_payload(a.0, group, "above", &[a]), json!({"layer": 10, "target": 20, "position": "above"}));
+        assert_eq!(layer_drop_payload(a.0, group, "below", &[]), json!({"layer": 10, "target": 20, "position": "below"}));
     }
 }
