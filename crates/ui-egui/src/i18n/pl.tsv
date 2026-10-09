@@ -2510,6 +2510,16 @@
 	Tone Histogram	Histogram tonalny
 	Show Selected Region	Pokaż zaznaczony region
 cameraRaw	Light	Światło
+fontWeight	Thin	Cienki
+fontWeight	ExtraLight	Ekstra cienki
+fontWeight	Light	Lekki
+fontWeight	Regular	Zwykły
+fontWeight	Medium	Średni
+fontWeight	SemiBold	Półgruby
+fontWeight	Bold	Pogrubiony
+fontWeight	ExtraBold	Ekstra gruby
+fontWeight	Black	Czarny
+fontWeight	Italic	Kursywa
 	Camera Raw Filter ({layer})	Filtr Camera Raw ({layer})
 cameraRaw	Lights	Jasne tony
 cameraRaw	Darks	Ciemne tony
@@ -3188,6 +3198,17 @@ cameraRaw	Roughness	Chropowatość
 	To drop files, start PhotoCraft under XWayland: `{command}`	Aby upuszczać pliki, uruchom PhotoCraft pod XWayland: `{command}`
 	Edit › Paste	Edycja › Wklej
 	Use File › Open, or paste a copied image with {paste}.	Użyj Plik › Otwórz albo wklej skopiowany obraz za pomocą {paste}.
+
+# Swatches panel
+	Create new swatch	Utwórz nową próbkę
+	New Swatch…	Nowa próbka…
+	New Swatch Group…	Nowa grupa próbek…
+	Import Swatches…	Importuj próbki…
+	Replace Swatches…	Zastąp próbki…
+	Export Swatches…	Eksportuj próbki…
+	Export Swatches for Exchange…	Eksportuj próbki do wymiany…
+	Reset Swatches	Resetuj próbki
+	Add to Swatches	Dodaj do próbek
 	Blend If:	Mieszaj, jeśli:
 	Channels:	Kanały:
 	Knockout	Wycięcie
@@ -3211,3 +3232,21 @@ cameraRaw	Roughness	Chropowatość
 	Click a red pupil to neutralize it	Kliknij czerwoną źrenicę, aby ją zneutralizować
 	open source	otwarte oprogramowanie
 	…and {n} more	…i {n} więcej
+	Eyedroppers:	Zakraplacze:
+	Set Black Point	Ustaw punkt czerni
+	Set Neutral Gray Point	Ustaw punkt neutralnej szarości
+	Set White Point	Ustaw punkt bieli
+	Unavailable in this color mode	Niedostępne w tym trybie koloru
+
+# Layer colour labels.
+	Seafoam	Morski
+	Indigo	Indygo
+	Fuchsia	Fuksja
+	Large document: redrawing on the CPU	Duży dokument: odświeżanie na CPU
+	This redraw took {seconds} s on the CPU.	To odświeżenie na CPU trwało {seconds} s.
+	Edits that change the whole document, such as a layer's blend mode, opacity or visibility, redraw all of it.	Zmiany obejmujące cały dokument, takie jak tryb mieszania, krycie lub widoczność warstwy, odświeżają go w całości.
+	Its layers don't fit the GPU memory budget. Raising Memory usage in Preferences › Performance raises the budget, up to a quarter of this computer's memory.	Warstwy nie mieszczą się w budżecie pamięci GPU. Zwiększenie wartości Użycie pamięci w Preferencje › Wydajność zwiększa budżet, maksymalnie do jednej czwartej pamięci tego komputera.
+	The GPU compositor wasn't used: {reason}	Kompozytor GPU nie został użyty: {reason}
+# Pattern Stamp tool
+	Pattern Stamp Tool	Narzędzie Pieczątka wzoru
+	Impressionist	Impresjonistyczny
